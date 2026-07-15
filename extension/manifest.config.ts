@@ -16,7 +16,9 @@ export default defineManifest({
   },
 
   background: {
-    service_worker: 'src/background/index.ts',
+    // content/index.ts 와 파일명이 겹치면 CRXJS 청크가 충돌해 SW가 엉뚱한 번들을
+    // 로드한다(onClicked 미등록 버그). 진입점 파일명을 반드시 구분한다.
+    service_worker: 'src/background/service-worker.ts',
     type: 'module',
   },
 
