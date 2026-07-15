@@ -1,0 +1,26 @@
+# 기획/작업 문서 (로컬 전용, README.md만 저장소에 포함)
+documate.md
+PLAN.md
+CLAUDE.md
+
+# 의존성
+node_modules/
+
+# 빌드 산출물
+dist/
+build/
+.vercel/
+
+# 환경 변수 / 시크릿
+.env
+.env.*
+!.env.example
+
+# 로그
+*.log
+npm-debug.log*
+
+# OS / 에디터
+.DS_Store
+.idea/
+.vscode/
