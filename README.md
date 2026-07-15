@@ -17,4 +17,4 @@
 
 ## 기술 스택
 
-Chrome MV3 · Vite + CRXJS · Preact(Shadow DOM) · @mozilla/readability · Vercel Functions · Gemini
+Chrome MV3 · Vite + CRXJS · Preact(Shadow DOM) · @mozilla/readability · Vercel Functions · Gemini (2.5-flash)

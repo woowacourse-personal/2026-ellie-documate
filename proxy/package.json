@@ -1,0 +1,19 @@
+{
+  "name": "documate-proxy",
+  "version": "0.0.0",
+  "description": "Documate LLM 프록시 — Gemini 키 보관 + 번역/해설 중계 (Vercel Functions)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@vercel/node": "^5.8.24",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@google/genai": "^2.11.0"
+  }
+}
