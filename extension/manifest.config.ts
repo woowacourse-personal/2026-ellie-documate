@@ -31,5 +31,9 @@ export default defineManifest({
     },
   ],
 
-  permissions: ['activeTab'],
+  // storage: 번역 결과 로컬 캐시(같은 문단 재번역 방지).
+  permissions: ['activeTab', 'storage'],
+
+  // 우리 프록시 호출 허용. 로컬 개발용 localhost — 배포 시 프록시 URL 추가/교체.
+  host_permissions: ['http://localhost:3000/*'],
 });

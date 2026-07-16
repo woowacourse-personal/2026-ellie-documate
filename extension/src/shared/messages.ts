@@ -6,8 +6,28 @@ export interface ToggleMessage {
   type: 'DOCUMATE_TOGGLE';
 }
 
-// 앞으로 추가될 메시지들(번역/해설 요청 등)은 이 유니온에 더한다.
-export type Message = ToggleMessage;
+// content → service worker: 이 문단들을 번역해줘 (SW가 캐시/프록시 중계)
+export interface TranslateItem {
+  id: string;
+  text: string;
+}
+export interface TranslateRequest {
+  type: 'DOCUMATE_TRANSLATE';
+  items: TranslateItem[];
+}
+
+// service worker → content: 번역 결과 (id로 매칭)
+export interface TranslateResult {
+  id: string;
+  translation: string;
+  error?: boolean;
+  reason?: string; // 실패 시 원인(콘솔 진단용). 예: 'proxy 502', 'network', 'quota'
+}
+export interface TranslateResponse {
+  results: TranslateResult[];
+}
+
+export type Message = ToggleMessage | TranslateRequest;
 
 // 타입 가드
 export function isMessage(value: unknown): value is Message {

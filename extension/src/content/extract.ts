@@ -22,10 +22,13 @@ export interface ExtractResult {
   readabilityOk: boolean; // false면 이 페이지 전체가 드래그 폴백 후보(F4)
 }
 
-// 문단 후보 블록. 콜아웃(Note/Warning)은 내부 <p>가 잡히므로 일반 문단처럼 포함된다.
+// 문단 후보 블록.
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, blockquote';
 // 코드/표 안 텍스트는 번역·해설 대상이 아니다 → 조상에 있으면 제외.
 const EXCLUDE_ANCESTOR = 'pre, code, table';
+// 콜아웃(Note 박스 등): Readability가 <aside>를 비본문으로 보고 제거하므로 정제본엔 없다.
+// 중요한 정보라 버리면 안 됨 → 원본에서 직접 수집해 문단에 합친다(사이트별로 넓힐 수 있음).
+const CALLOUT_SELECTOR = 'aside.note';
 const MIN_TEXT_LEN = 2;
 
 interface Block {
@@ -48,13 +51,39 @@ function collectBlocks(root: ParentNode): Block[] {
   return out;
 }
 
+// 원본 문서의 콜아웃(aside.note 등)을 문단으로 수집. Readability가 버리므로 원본에서 직접 잡는다.
+// 이미 다른 경로로 잡힌 노드(used)는 건너뛴다.
+function collectCallouts(used: Set<HTMLElement>): Block[] {
+  const out: Block[] = [];
+  for (const node of document.querySelectorAll<HTMLElement>(CALLOUT_SELECTOR)) {
+    if (used.has(node)) continue;
+    if (node.closest(EXCLUDE_ANCESTOR)) continue;
+    if (node.closest('#documate-root')) continue;
+    const text = normalize(node.textContent ?? '');
+    if (text.length < MIN_TEXT_LEN) continue;
+    out.push({ node, text, kind: 'text' });
+  }
+  return out;
+}
+
+// 문서(DOM) 등장 순서 비교자. 합쳐진 문단·note를 제자리로 정렬해 위→아래 순 번역이 되게 한다.
+function inDomOrder(a: Block, b: Block): number {
+  if (a.node === b.node) return 0;
+  return a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING
+    ? -1
+    : 1;
+}
+
 export function extractParagraphs(): ExtractResult {
   const article = runReadability();
 
   // Readability 실패: 원본 블록을 그대로 쓰되 폴백으로 표시(nav 필터 불가).
   if (!article) {
     const live = collectBlocks(document.body);
-    const paragraphs = live.map((b, i) => tag(b, i));
+    // 콜아웃 합치기(BLOCK_SELECTOR엔 안 잡힘) 후 문서 순서로 정렬.
+    const used = new Set(live.map((b) => b.node));
+    const blocks = [...live, ...collectCallouts(used)].sort(inDomOrder);
+    const paragraphs = blocks.map((b, i) => tag(b, i));
     return {
       title: document.title,
       paragraphs,
@@ -70,17 +99,22 @@ export function extractParagraphs(): ExtractResult {
   // 원본 DOM 블록을 텍스트로 색인 → 정제 문단을 원본 노드에 매핑.
   const liveIndex = indexByText(collectBlocks(document.body));
 
-  const paragraphs: Paragraph[] = [];
+  const mapped: Block[] = [];
   let unmappedCount = 0;
-  let i = 0;
   for (const cb of cleanBlocks) {
     const liveNode = liveIndex.get(cb.text);
     if (!liveNode) {
       unmappedCount++; // 원본에서 못 찾음 → 드래그 폴백 대상
       continue;
     }
-    paragraphs.push(tag({ ...cb, node: liveNode }, i++));
+    mapped.push({ ...cb, node: liveNode });
   }
+
+  // 콜아웃 합치기(Readability가 aside를 제거하므로 정제본엔 없음 → 원본에서 직접) 후
+  // 문서(DOM) 순서로 정렬 → note가 제자리에 들어가 화면 위→아래 순으로 번역된다.
+  const used = new Set(mapped.map((b) => b.node));
+  const blocks = [...mapped, ...collectCallouts(used)].sort(inDomOrder);
+  const paragraphs = blocks.map((b, idx) => tag(b, idx));
 
   return {
     title: article.title || document.title,
