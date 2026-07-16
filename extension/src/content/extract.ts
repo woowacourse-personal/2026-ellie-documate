@@ -1,10 +1,19 @@
 import { Readability } from '@mozilla/readability';
 import { indexByText, normalize } from './mapper';
 
-// 본문 추출 + 문단 분리 + 원본 DOM 매핑. 이 프로젝트 최대 기술 리스크.
+// 본문 추출 + 문단 분리. 이 프로젝트 최대 기술 리스크.
 //
-// 흐름: Readability로 정제 본문 HTML 확보 → 거기서 문단 수집(nav 없음) →
-//       각 문단을 원본 DOM 노드에 정확 텍스트 매칭(주입 대상 확보).
+// 설계(B: 콘텐츠 루트 직접 순회):
+//   1. Readability로 "본문 문단 텍스트 집합 S"를 얻는다(정제본 = nav·광고·잡음 제거됨).
+//   2. 원본 DOM에서 그 문단들의 최소 공통 조상(LCA) = "콘텐츠 루트"를 찾는다.
+//   3. 콘텐츠 루트를 원본 DOM에서 직접 순회하며 leaf 블록을 모으고,
+//      "텍스트가 S에 있거나(=본문) 콜아웃이면" 채택한다.
+//
+// 왜 이 구조인가:
+//   - 원본 노드를 직접 다루므로 "정제본→원본 노드 재탐색"이라는 취약한 단계가 없다.
+//   - S를 화이트리스트로 써서 스킵링크·배지·라이선스·푸터 같은 페이지 잡음을 걸러낸다.
+//   - 콜아웃은 이 순회에서 자연히 포함된다(내부에 <p>가 없는 android식 aside는 leaf로 잡히고,
+//     <p>를 가진 MDN식 notecard는 그 <p>가 S에 있어 잡힌다) → 별도 수집·정렬 경로 불필요.
 
 export type ParagraphKind = 'text' | 'heading' | 'list-item' | 'quote';
 
@@ -17,18 +26,31 @@ export interface Paragraph {
 
 export interface ExtractResult {
   title: string;
-  paragraphs: Paragraph[]; // 원본 노드 매핑에 성공한 문단
-  unmappedCount: number; // 정제본엔 있으나 원본 매핑 실패 → 드래그 폴백 대상
+  paragraphs: Paragraph[];
+  unmappedCount: number; // Readability 본문(S)인데 루트 순회에서 못 잡은 수(진단·폴백 신호)
   readabilityOk: boolean; // false면 이 페이지 전체가 드래그 폴백 후보(F4)
 }
 
-// 문단 후보 블록.
+// 본문 문단 후보(프로세). S 구성과 원본 색인·leaf 판정에 쓴다.
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, blockquote';
-// 코드/표 안 텍스트는 번역·해설 대상이 아니다 → 조상에 있으면 제외.
-const EXCLUDE_ANCESTOR = 'pre, code, table';
-// 콜아웃(Note 박스 등): Readability가 <aside>를 비본문으로 보고 제거하므로 정제본엔 없다.
-// 중요한 정보라 버리면 안 됨 → 원본에서 직접 수집해 문단에 합친다(사이트별로 넓힐 수 있음).
-const CALLOUT_SELECTOR = 'aside.note';
+// 콜아웃(Note/Warning 박스 등): Readability가 비본문으로 제거하는 경우가 많다.
+// 내부에 <p>가 없는 형태(android aside)는 여기서 leaf로 직접 잡는다.
+const CALLOUT_SELECTOR = [
+  'aside', // note/warning/caution/key-point 등 콜아웃 전반
+  '.notecard', // MDN
+  '[class*="admonition"]', // Docusaurus, Sphinx/Read the Docs
+  '.callout', // 여러 문서 테마 공통
+  '.markdown-alert', // GitHub 렌더링
+  '[role="note"]', // ARIA
+].join(', ');
+// 루트 순회 대상 = 본문 블록 + 콜아웃.
+const WALK_SELECTOR = `${BLOCK_SELECTOR}, ${CALLOUT_SELECTOR}`;
+// 코드/표는 번역 대상이 아니다.
+const EXCLUDE_CODE = 'pre, code, table';
+// 루트 안이라도 네비/헤더/푸터/보조영역은 본문이 아니다.
+const EXCLUDE_NONCONTENT =
+  'pre, code, table, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+const OUR_UI = '#documate-root, [data-documate-ui]';
 const MIN_TEXT_LEN = 2;
 
 interface Block {
@@ -37,13 +59,17 @@ interface Block {
   kind: ParagraphKind;
 }
 
-// 루트 아래에서 문단 블록만 수집(코드/표 제외, leaf 블록만).
-function collectBlocks(root: ParentNode): Block[] {
+// 루트 아래 leaf 블록 수집(코드/표·우리 UI 제외). selector/exclude를 바꿔 재사용.
+function collectBlocks(
+  root: ParentNode,
+  selector: string,
+  exclude: string,
+): Block[] {
   const out: Block[] = [];
-  for (const node of root.querySelectorAll<HTMLElement>(BLOCK_SELECTOR)) {
-    if (node.closest(EXCLUDE_ANCESTOR)) continue; // 코드/표 안
-    if (node.querySelector(BLOCK_SELECTOR)) continue; // 중첩 블록의 상위 → leaf만
-    if (node.closest('#documate-root')) continue; // 우리 주입 UI
+  for (const node of root.querySelectorAll<HTMLElement>(selector)) {
+    if (node.closest(exclude)) continue;
+    if (node.querySelector(selector)) continue; // 중첩 블록의 상위 → leaf만
+    if (node.closest(OUR_UI)) continue; // 우리 주입 UI
     const text = normalize(node.textContent ?? '');
     if (text.length < MIN_TEXT_LEN) continue;
     out.push({ node, text, kind: kindOf(node.tagName) });
@@ -51,70 +77,87 @@ function collectBlocks(root: ParentNode): Block[] {
   return out;
 }
 
-// 원본 문서의 콜아웃(aside.note 등)을 문단으로 수집. Readability가 버리므로 원본에서 직접 잡는다.
-// 이미 다른 경로로 잡힌 노드(used)는 건너뛴다.
-function collectCallouts(used: Set<HTMLElement>): Block[] {
-  const out: Block[] = [];
-  for (const node of document.querySelectorAll<HTMLElement>(CALLOUT_SELECTOR)) {
-    if (used.has(node)) continue;
-    if (node.closest(EXCLUDE_ANCESTOR)) continue;
-    if (node.closest('#documate-root')) continue;
-    const text = normalize(node.textContent ?? '');
-    if (text.length < MIN_TEXT_LEN) continue;
-    out.push({ node, text, kind: 'text' });
-  }
-  return out;
+// 콜아웃 판정: 콜아웃 셀렉터에 맞고 네비/헤더/푸터 밖.
+function isCallout(node: HTMLElement): boolean {
+  return node.matches(CALLOUT_SELECTOR) && !node.closest('nav, header, footer');
 }
 
-// 문서(DOM) 등장 순서 비교자. 합쳐진 문단·note를 제자리로 정렬해 위→아래 순 번역이 되게 한다.
-function inDomOrder(a: Block, b: Block): number {
-  if (a.node === b.node) return 0;
-  return a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING
-    ? -1
-    : 1;
+// 노드들의 최소 공통 조상. Readability 본문 노드들의 LCA = 콘텐츠 컨테이너.
+function lca(nodes: HTMLElement[]): HTMLElement | null {
+  if (nodes.length === 0) return null;
+  let common: HTMLElement | null = nodes[0];
+  let anc = ancestorSet(common);
+  for (let i = 1; i < nodes.length; i++) {
+    let n: HTMLElement | null = nodes[i];
+    while (n && !anc.has(n)) n = n.parentElement;
+    if (!n) return null;
+    common = n;
+    anc = ancestorSet(common);
+  }
+  return common;
+}
+function ancestorSet(el: HTMLElement): Set<HTMLElement> {
+  const s = new Set<HTMLElement>();
+  for (let x: HTMLElement | null = el; x; x = x.parentElement) s.add(x);
+  return s;
+}
+
+// 콘텐츠 루트: 본문 노드들의 LCA. 너무 넓으면(body/html) main/article로 보정.
+function findContentRoot(matched: HTMLElement[]): HTMLElement {
+  const root = lca(matched);
+  if (!root || root === document.body || root === document.documentElement) {
+    return document.querySelector<HTMLElement>('main, article') ?? document.body;
+  }
+  return root;
 }
 
 export function extractParagraphs(): ExtractResult {
   const article = runReadability();
 
-  // Readability 실패: 원본 블록을 그대로 쓰되 폴백으로 표시(nav 필터 불가).
+  // Readability 실패: 화이트리스트(S)가 없으므로 잡음을 못 거른다.
+  // main/article(없으면 body)를 순회해 leaf 블록을 그대로 쓰되 폴백으로 표시(F4가 흡수).
   if (!article) {
-    const live = collectBlocks(document.body);
-    // 콜아웃 합치기(BLOCK_SELECTOR엔 안 잡힘) 후 문서 순서로 정렬.
-    const used = new Set(live.map((b) => b.node));
-    const blocks = [...live, ...collectCallouts(used)].sort(inDomOrder);
-    const paragraphs = blocks.map((b, i) => tag(b, i));
-    return {
-      title: document.title,
-      paragraphs,
-      unmappedCount: 0,
-      readabilityOk: false,
-    };
+    const root =
+      document.querySelector<HTMLElement>('main, article') ?? document.body;
+    const paragraphs = collectBlocks(
+      root,
+      WALK_SELECTOR,
+      EXCLUDE_NONCONTENT,
+    ).map((b, i) => tag(b, i));
+    return { title: document.title, paragraphs, unmappedCount: 0, readabilityOk: false };
   }
 
-  // 정제 본문 HTML을 파싱해 문단 수집(nav 없음).
+  // 1) Readability 정제본에서 본문 문단 텍스트 집합 S.
   const cleanDoc = new DOMParser().parseFromString(article.content, 'text/html');
-  const cleanBlocks = collectBlocks(cleanDoc.body);
+  const proseSet = new Set(
+    collectBlocks(cleanDoc.body, BLOCK_SELECTOR, EXCLUDE_CODE).map((b) => b.text),
+  );
 
-  // 원본 DOM 블록을 텍스트로 색인 → 정제 문단을 원본 노드에 매핑.
-  const liveIndex = indexByText(collectBlocks(document.body));
+  // 2) 원본에서 S 문단들의 노드 → LCA로 콘텐츠 루트 찾기.
+  const origIndex = indexByText(
+    collectBlocks(document.body, BLOCK_SELECTOR, EXCLUDE_CODE),
+  );
+  const matched: HTMLElement[] = [];
+  for (const text of proseSet) {
+    const node = origIndex.get(text);
+    if (node) matched.push(node);
+  }
+  const root = findContentRoot(matched);
 
-  const mapped: Block[] = [];
-  let unmappedCount = 0;
-  for (const cb of cleanBlocks) {
-    const liveNode = liveIndex.get(cb.text);
-    if (!liveNode) {
-      unmappedCount++; // 원본에서 못 찾음 → 드래그 폴백 대상
-      continue;
+  // 3) 콘텐츠 루트를 원본에서 직접 순회 → 본문(∈S) 또는 콜아웃만 채택(DOM 순서 유지).
+  const paragraphs: Paragraph[] = [];
+  const kept = new Set<string>();
+  let i = 0;
+  for (const b of collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT)) {
+    if (proseSet.has(b.text) || isCallout(b.node)) {
+      paragraphs.push(tag(b, i++));
+      kept.add(b.text);
     }
-    mapped.push({ ...cb, node: liveNode });
   }
 
-  // 콜아웃 합치기(Readability가 aside를 제거하므로 정제본엔 없음 → 원본에서 직접) 후
-  // 문서(DOM) 순서로 정렬 → note가 제자리에 들어가 화면 위→아래 순으로 번역된다.
-  const used = new Set(mapped.map((b) => b.node));
-  const blocks = [...mapped, ...collectCallouts(used)].sort(inDomOrder);
-  const paragraphs = blocks.map((b, idx) => tag(b, idx));
+  // Readability 본문인데 루트 순회에서 못 잡은 수(텍스트 불일치·루트 밖 등) → 진단/폴백 신호.
+  let unmappedCount = 0;
+  for (const text of proseSet) if (!kept.has(text)) unmappedCount++;
 
   return {
     title: article.title || document.title,
