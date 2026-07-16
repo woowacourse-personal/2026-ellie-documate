@@ -7,7 +7,8 @@ import { indexByText, normalize } from './mapper';
 //   1. Readability로 "본문 문단 텍스트 집합 S"를 얻는다(정제본 = nav·광고·잡음 제거됨).
 //   2. 원본 DOM에서 그 문단들의 최소 공통 조상(LCA) = "콘텐츠 루트"를 찾는다.
 //   3. 콘텐츠 루트를 원본 DOM에서 직접 순회하며 leaf 블록을 모으고,
-//      "텍스트가 S에 있거나(=본문) 콜아웃이면" 채택한다.
+//      "텍스트가 S에 있거나(=본문), 콜아웃이거나, 제목(h1~6)이면" 채택한다.
+//      (제목은 Readability가 본문에서 빼는 경우가 있어 별도로 항상 채택)
 //
 // 왜 이 구조인가:
 //   - 원본 노드를 직접 다루므로 "정제본→원본 노드 재탐색"이라는 취약한 단계가 없다.
@@ -70,11 +71,29 @@ function collectBlocks(
     if (node.closest(exclude)) continue;
     if (node.querySelector(selector)) continue; // 중첩 블록의 상위 → leaf만
     if (node.closest(OUR_UI)) continue; // 우리 주입 UI
-    const text = normalize(node.textContent ?? '');
+    const text = blockText(node);
     if (text.length < MIN_TEXT_LEN) continue;
     out.push({ node, text, kind: kindOf(node.tagName) });
   }
   return out;
+}
+
+// 블록의 번역 텍스트. 제목에 박힌 인터랙티브 위젯(북마크·앵커·복사 버튼, 커스텀 엘리먼트)은
+// 텍스트에서 제외한다. 예: developer.android.com H1 안의 <devsite-actions> 북마크 위젯.
+function blockText(node: HTMLElement): string {
+  if (!isHeading(node)) return normalize(node.textContent ?? '');
+  const clone = node.cloneNode(true) as HTMLElement;
+  for (const el of clone.querySelectorAll('button, [role="button"], [aria-hidden="true"]')) {
+    el.remove();
+  }
+  for (const el of clone.querySelectorAll('*')) {
+    if (el.tagName.includes('-')) el.remove(); // 커스텀 엘리먼트(위젯)
+  }
+  return normalize(clone.textContent ?? '');
+}
+
+function isHeading(node: HTMLElement): boolean {
+  return /^H[1-6]$/.test(node.tagName);
 }
 
 // 콜아웃 판정: 콜아웃 셀렉터에 맞고 네비/헤더/푸터 밖.
@@ -148,8 +167,10 @@ export function extractParagraphs(): ExtractResult {
   const paragraphs: Paragraph[] = [];
   const kept = new Set<string>();
   let i = 0;
+  // 제목은 Readability가 본문에서 빼는 경우가 있어(페이지 제목·일부 소제목) S에 없을 수 있다.
+  // 콘텐츠 루트 안 제목은 항상 채택한다(nav/헤더/푸터는 EXCLUDE_NONCONTENT가 이미 제외 → TOC 중복 없음).
   for (const b of collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT)) {
-    if (proseSet.has(b.text) || isCallout(b.node)) {
+    if (proseSet.has(b.text) || isCallout(b.node) || isHeading(b.node)) {
       paragraphs.push(tag(b, i++));
       kept.add(b.text);
     }
