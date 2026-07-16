@@ -25,6 +25,8 @@ export interface TranslateResult {
 }
 export interface TranslateResponse {
   results: TranslateResult[];
+  // 단계별 소요 시간(ms). 진단용 — content가 콘솔에 breakdown으로 찍는다.
+  timing?: { cacheMs: number; proxyMs: number; geminiMs: number };
 }
 
 export type Message = ToggleMessage | TranslateRequest;

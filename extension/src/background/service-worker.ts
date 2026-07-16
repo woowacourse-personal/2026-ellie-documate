@@ -54,19 +54,27 @@ async function handleTranslate(
   const uncached: TranslateItem[] = [];
 
   // 1) 캐시 확인
+  const tCache = Date.now();
   for (const it of items) {
     const hit = await cacheGet(it.text);
     if (hit !== undefined) results.push({ id: it.id, translation: hit });
     else uncached.push(it);
   }
+  const cacheMs = Date.now() - tCache;
   console.log(
-    `[Documate BG] 번역 요청 ${items.length}개 · 캐시적중 ${items.length - uncached.length} · 신규 ${uncached.length}`,
+    `[Documate BG] 번역 요청 ${items.length}개 · 캐시적중 ${items.length - uncached.length} · 신규 ${uncached.length} · 캐시확인 ${cacheMs}ms`,
   );
 
   // 2) 미적중만 프록시 호출 후 캐시 저장
+  let proxyMs = 0;
+  let geminiMs = 0;
   if (uncached.length > 0) {
     const t0 = Date.now();
-    const outcomes = await translateViaProxy(uncached.map((i) => i.text));
+    const { outcomes, geminiMs: gm } = await translateViaProxy(
+      uncached.map((i) => i.text),
+    );
+    proxyMs = Date.now() - t0;
+    geminiMs = gm;
     const toCache: { text: string; translation: string }[] = [];
     let failed = 0;
     uncached.forEach((it, i) => {
@@ -86,9 +94,9 @@ async function handleTranslate(
     });
     await cacheSetMany(toCache);
     console.log(
-      `[Documate BG] 신규 ${uncached.length}개 프록시 처리 완료 · ${Date.now() - t0}ms · 실패 ${failed}`,
+      `[Documate BG] 신규 ${uncached.length}개 처리 · 프록시왕복 ${proxyMs}ms (Gemini ${geminiMs}ms + 오버헤드 ${proxyMs - geminiMs}ms) · 실패 ${failed}`,
     );
   }
 
-  return { results };
+  return { results, timing: { cacheMs, proxyMs, geminiMs } };
 }

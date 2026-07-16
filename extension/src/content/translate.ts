@@ -50,11 +50,13 @@ export function createTranslator(byId: Map<string, Paragraph>): Translator {
       items: chunk.map((p) => ({ id: p.id, text: p.text })),
     };
 
-    const t0 = performance.now();
+    const tSend = performance.now();
     try {
       const res = (await chrome.runtime.sendMessage(req)) as TranslateResponse;
       if (disposed) return;
-      const ms = Math.round(performance.now() - t0);
+      const roundtripMs = Math.round(performance.now() - tSend);
+
+      const tRender = performance.now();
       let ok = 0;
       for (const r of res.results) {
         const p = byId.get(r.id);
@@ -69,8 +71,15 @@ export function createTranslator(byId: Map<string, Paragraph>): Translator {
           showTranslation(p, r.translation);
         }
       }
+      const renderMs = Math.round(performance.now() - tRender);
+
+      // 단계별 breakdown: 어디서 시간이 가는지 한 줄로.
+      const t = res.timing;
+      const detail = t
+        ? ` | Gemini ${t.geminiMs}ms · 프록시overhead ${t.proxyMs - t.geminiMs}ms · 캐시 ${t.cacheMs}ms · 메시지 ${roundtripMs - t.cacheMs - t.proxyMs}ms · 렌더 ${renderMs}ms`
+        : '';
       console.log(
-        `[Documate] 번역 청크 ${chunk.length}개 · ${ms}ms · 성공 ${ok}/${chunk.length}`,
+        `[Documate] 청크 ${chunk.length}개 · 왕복 ${roundtripMs}ms · 성공 ${ok}/${chunk.length}${detail}`,
       );
     } catch (e) {
       if (disposed) return;

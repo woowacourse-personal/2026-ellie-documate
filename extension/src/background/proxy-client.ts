@@ -19,32 +19,40 @@ export type TranslateOutcome =
   | { ok: true; translation: string }
   | { ok: false; reason: string };
 
-export async function translateViaProxy(
-  texts: string[],
-): Promise<TranslateOutcome[]> {
+// geminiMs = 프록시가 알려준 순수 생성시간 합계(프록시/네트워크 오버헤드 제외).
+export interface ProxyResult {
+  outcomes: TranslateOutcome[];
+  geminiMs: number;
+}
+
+export async function translateViaProxy(texts: string[]): Promise<ProxyResult> {
   const out: TranslateOutcome[] = [];
+  let geminiMs = 0;
   for (let i = 0; i < texts.length; i += TRANSLATE_BATCH) {
     const chunk = texts.slice(i, i + TRANSLATE_BATCH);
     const t0 = Date.now();
     try {
-      const translations = await translateChunk(chunk);
+      const r = await translateChunk(chunk);
+      geminiMs += r.geminiMs;
       console.log(
-        `[Documate BG] 청크 ${chunk.length}개 번역 성공 · ${Date.now() - t0}ms`,
+        `[Documate BG] 청크 ${chunk.length}개 성공 · 프록시왕복 ${Date.now() - t0}ms · Gemini ${r.geminiMs}ms`,
       );
-      for (const tr of translations) out.push({ ok: true, translation: tr });
+      for (const tr of r.translations) out.push({ ok: true, translation: tr });
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       console.warn(
-        `[Documate BG] 청크 ${chunk.length}개 번역 실패 · ${Date.now() - t0}ms · 원인: ${reason}`,
+        `[Documate BG] 청크 ${chunk.length}개 실패 · 프록시왕복 ${Date.now() - t0}ms · 원인: ${reason}`,
       );
       for (let k = 0; k < chunk.length; k++) out.push({ ok: false, reason });
     }
   }
-  return out;
+  return { outcomes: out, geminiMs };
 }
 
 // 청크 하나를 재시도와 함께 번역. 일시적 오류만 재시도하고 4xx는 즉시 포기.
-async function translateChunk(chunk: string[]): Promise<string[]> {
+async function translateChunk(
+  chunk: string[],
+): Promise<{ translations: string[]; geminiMs: number }> {
   let lastErr: Error | undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let res: Response;
@@ -62,6 +70,7 @@ async function translateChunk(chunk: string[]): Promise<string[]> {
     }
 
     if (res.ok) {
+      const geminiMs = Number(res.headers.get('X-Gemini-Ms')) || 0;
       const data = (await res.json().catch(() => ({}))) as {
         translations?: unknown;
       };
@@ -69,7 +78,7 @@ async function translateChunk(chunk: string[]): Promise<string[]> {
         Array.isArray(data.translations) &&
         data.translations.length === chunk.length
       ) {
-        return data.translations as string[];
+        return { translations: data.translations as string[], geminiMs };
       }
       lastErr = new Error('모델 응답 형식 이상 (배열 길이 불일치)'); // → 재시도
     } else if (res.status === 429 || res.status >= 500) {
