@@ -20,7 +20,12 @@ function ensureHost(p: Paragraph): ShadowRoot {
   return host.shadowRoot ?? host.attachShadow({ mode: 'open' });
 }
 
-function render(root: ShadowRoot, text: string, state: 'loading' | 'done' | 'error'): void {
+function render(
+  p: Paragraph,
+  text: string,
+  state: 'loading' | 'done' | 'error',
+): void {
+  const root = ensureHost(p);
   root.replaceChildren();
 
   const style = document.createElement('style');
@@ -32,13 +37,7 @@ function render(root: ShadowRoot, text: string, state: 'loading' | 'done' | 'err
       border-left: 3px solid #8ab4f8;
       background: rgba(138, 180, 248, 0.08);
       border-radius: 0 6px 6px 0;
-      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: #202124;
-    }
-    .tag {
-      display: inline-block; margin-right: 6px; padding: 0 5px;
-      border-radius: 4px; background: #8ab4f8; color: #1b1b1f;
-      font-size: 11px; font-weight: 700; vertical-align: 1px;
     }
     .loading { color: #9aa0a6; }
     .error { color: #d93025; border-left-color: #d93025; background: rgba(217,48,37,0.06); }
@@ -50,28 +49,29 @@ function render(root: ShadowRoot, text: string, state: 'loading' | 'done' | 'err
   const box = document.createElement('div');
   box.className = `tr${state === 'loading' ? ' loading' : ''}${state === 'error' ? ' error' : ''}`;
 
-  const tag = document.createElement('span');
-  tag.className = 'tag';
-  tag.textContent = '번역';
+  // 번역문 글자 크기·행높이·굵기·글꼴을 원문 문단과 동일하게 맞춘다.
+  // (Shadow DOM은 스타일 상속이 끊기므로 명시적으로 지정. 페이지 값 주입은
+  //  CSS 파싱이 아닌 element.style 대입이라 주입 위험 없음 — 잘못된 값은 무시됨.)
+  const cs = getComputedStyle(p.node);
+  box.style.fontSize = cs.fontSize;
+  box.style.lineHeight = cs.lineHeight;
+  box.style.fontWeight = cs.fontWeight;
+  box.style.fontFamily = cs.fontFamily;
 
-  const body = document.createElement('span');
-  body.className = 'body';
-  body.textContent = text; // 항상 textContent
-
-  box.append(tag, body);
+  box.textContent = text; // 항상 textContent
   root.append(style, box);
 }
 
 export function showTranslationLoading(p: Paragraph): void {
-  render(ensureHost(p), '번역 중…', 'loading');
+  render(p, '번역 중…', 'loading');
 }
 
 export function showTranslation(p: Paragraph, text: string): void {
-  render(ensureHost(p), text, 'done');
+  render(p, text, 'done');
 }
 
 export function showTranslationError(p: Paragraph): void {
-  render(ensureHost(p), '번역을 불러오지 못했어요.', 'error');
+  render(p, '번역을 불러오지 못했어요.', 'error');
 }
 
 export function removeAllTranslations(): void {
