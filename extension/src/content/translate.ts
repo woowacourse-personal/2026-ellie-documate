@@ -7,6 +7,13 @@ import {
   showTranslationError,
   showTranslationLoading,
 } from './ui/translation';
+import { mountExplain } from './ui/explain';
+
+// 해설(F2)에 넘길 문서 맥락. 문서 제목 + 각 문단의 앞 문단 텍스트.
+export interface DocContext {
+  title: string;
+  precedingOf(id: string): string | undefined;
+}
 
 // 추출한 문단을 번역 요청한다. 짧게 디바운스해 모은 뒤 TRANSLATE_BATCH개씩
 // 청크로 쪼개 각각 따로 요청·렌더한다 → 먼저 도착한 청크부터 화면이 채워진다
@@ -19,7 +26,17 @@ export interface Translator {
 
 const DEBOUNCE_MS = 150;
 
-export function createTranslator(byId: Map<string, Paragraph>): Translator {
+// 개념 해설("해설 보기") 버튼은 문장에만 붙인다. 단어·짧은 라벨·제목엔 붙이지 않는다.
+// (번역은 그대로 하되 해설 버튼만 제한) — 제목(heading)은 제외 + 단어 수로 문장 여부를 가늠한다.
+const MIN_WORDS_FOR_EXPLAIN = 4;
+function looksLikeSentence(text: string): boolean {
+  return text.trim().split(/\s+/).length >= MIN_WORDS_FOR_EXPLAIN;
+}
+
+export function createTranslator(
+  byId: Map<string, Paragraph>,
+  doc: DocContext,
+): Translator {
   const pending = new Map<string, Paragraph>();
   const requested = new Set<string>(); // 이미 처리(요청)한 문단
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -69,6 +86,13 @@ export function createTranslator(byId: Map<string, Paragraph>): Translator {
         } else {
           ok++;
           showTranslation(p, r.translation);
+          // 번역 아래 "해설 보기" 버튼(F2) — 문장에만 붙인다(단어·짧은 라벨·제목 제외).
+          if (p.kind !== 'heading' && looksLikeSentence(p.text)) {
+            mountExplain(p, {
+              docTitle: doc.title,
+              precedingText: doc.precedingOf(p.id),
+            });
+          }
         }
       }
       const renderMs = Math.round(performance.now() - tRender);

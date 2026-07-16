@@ -1,15 +1,41 @@
 // Service Worker.
 //  - 아이콘 클릭 → content에 토글 메시지
 //  - content의 번역 요청 중계: 캐시 확인 → 미적중만 프록시 호출 → 캐시 저장
+//  - content의 해설 요청 중계(스트리밍): Port로 받아 프록시 스트림을 델타로 흘려보냄
 
-import { isMessage } from '../shared/messages';
+import { EXPLAIN_PORT, isMessage } from '../shared/messages';
 import type {
+  ExplainEvent,
+  ExplainRequest,
   ToggleMessage,
   TranslateItem,
   TranslateResponse,
 } from '../shared/messages';
 import { cacheGet, cacheSetMany } from './cache';
 import { translateViaProxy } from './proxy-client';
+import { streamExplain } from './explain-client';
+
+// 해설 스트리밍: content가 EXPLAIN_PORT로 포트를 열고 ExplainRequest를 보낸다.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== EXPLAIN_PORT) return;
+  port.onMessage.addListener((msg) => {
+    const req = msg as ExplainRequest;
+    const post = (e: ExplainEvent) => {
+      try {
+        port.postMessage(e);
+      } catch {
+        // content가 이미 포트를 닫았으면 무시
+      }
+    };
+    streamExplain(req, (delta) => post({ type: 'chunk', delta }))
+      .then(() => post({ type: 'done' }))
+      .catch((e) => {
+        const reason = e instanceof Error ? e.message : String(e);
+        console.warn('[Documate BG] 해설 실패', reason);
+        post({ type: 'error', reason });
+      });
+  });
+});
 
 chrome.action.onClicked.addListener((tab) => {
   console.log('[Documate BG] 아이콘 클릭됨 · tab', tab.id, tab.url);

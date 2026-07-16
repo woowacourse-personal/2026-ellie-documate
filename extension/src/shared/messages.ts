@@ -29,6 +29,23 @@ export interface TranslateResponse {
   timing?: { cacheMs: number; proxyMs: number; geminiMs: number };
 }
 
+// 개념 해설(F2) — 스트리밍이라 request/response가 아니라 Port로 주고받는다.
+// content가 이 이름으로 포트를 열고 ExplainRequest를 보내면 SW가 ExplainEvent를 흘려보낸다.
+export const EXPLAIN_PORT = 'documate-explain';
+
+export interface ExplainRequest {
+  text: string; // 해설 대상(문단 원문 또는 코드)
+  docTitle?: string; // 문서 제목(맥락)
+  precedingText?: string; // 앞 문단(맥락)
+  kind?: 'concept' | 'code'; // 개념 해설(기본) vs "이 코드가 무엇을 하는지" 해설
+}
+
+// SW → content 스트림 이벤트
+export type ExplainEvent =
+  | { type: 'chunk'; delta: string }
+  | { type: 'done' }
+  | { type: 'error'; reason: string };
+
 export type Message = ToggleMessage | TranslateRequest;
 
 // 타입 가드

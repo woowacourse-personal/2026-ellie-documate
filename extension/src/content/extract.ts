@@ -16,7 +16,7 @@ import { indexByText, normalize } from './mapper';
 //   - 콜아웃은 이 순회에서 자연히 포함된다(내부에 <p>가 없는 android식 aside는 leaf로 잡히고,
 //     <p>를 가진 MDN식 notecard는 그 <p>가 S에 있어 잡힌다) → 별도 수집·정렬 경로 불필요.
 
-export type ParagraphKind = 'text' | 'heading' | 'list-item' | 'quote';
+export type ParagraphKind = 'text' | 'heading' | 'list-item' | 'quote' | 'code';
 
 export interface Paragraph {
   id: string; // 안정적 식별자 (원본 노드에 data-documate-id로도 심는다)
@@ -101,6 +101,32 @@ function isCallout(node: HTMLElement): boolean {
   return node.matches(CALLOUT_SELECTOR) && !node.closest('nav, header, footer');
 }
 
+// 코드 블록(<pre>): 번역하지 않고 "코드 해설" 대상으로만 수집. 개행을 보존한다.
+const CODE_SELECTOR = 'pre';
+const EXCLUDE_CHROME =
+  'nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+function collectCode(root: ParentNode): Block[] {
+  const out: Block[] = [];
+  for (const node of root.querySelectorAll<HTMLElement>(CODE_SELECTOR)) {
+    if (node.closest(EXCLUDE_CHROME)) continue; // 네비/푸터 안 코드 제외
+    if (node.closest(OUR_UI)) continue;
+    if (node.parentElement?.closest(CODE_SELECTOR)) continue; // 중첩 pre → 바깥만
+    // 코드는 정규화하지 않는다(개행·들여쓰기 유지). 양끝 공백만 정리.
+    const text = (node.textContent ?? '').replace(/\r/g, '').trim();
+    if (text.length < MIN_TEXT_LEN) continue;
+    out.push({ node, text, kind: 'code' });
+  }
+  return out;
+}
+
+// 문서(DOM) 등장 순서 비교자 — 본문·콜아웃·코드를 제자리로 섞어 정렬.
+function inDomOrder(a: Block, b: Block): number {
+  if (a.node === b.node) return 0;
+  return a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING
+    ? -1
+    : 1;
+}
+
 // 노드들의 최소 공통 조상. Readability 본문 노드들의 LCA = 콘텐츠 컨테이너.
 function lca(nodes: HTMLElement[]): HTMLElement | null {
   if (nodes.length === 0) return null;
@@ -138,11 +164,11 @@ export function extractParagraphs(): ExtractResult {
   if (!article) {
     const root =
       document.querySelector<HTMLElement>('main, article') ?? document.body;
-    const paragraphs = collectBlocks(
-      root,
-      WALK_SELECTOR,
-      EXCLUDE_NONCONTENT,
-    ).map((b, i) => tag(b, i));
+    const blocks = [
+      ...collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT),
+      ...collectCode(root),
+    ].sort(inDomOrder);
+    const paragraphs = blocks.map((b, i) => tag(b, i));
     return { title: document.title, paragraphs, unmappedCount: 0, readabilityOk: false };
   }
 
@@ -163,22 +189,24 @@ export function extractParagraphs(): ExtractResult {
   }
   const root = findContentRoot(matched);
 
-  // 3) 콘텐츠 루트를 원본에서 직접 순회 → 본문(∈S) 또는 콜아웃만 채택(DOM 순서 유지).
-  const paragraphs: Paragraph[] = [];
-  const kept = new Set<string>();
-  let i = 0;
-  // 제목은 Readability가 본문에서 빼는 경우가 있어(페이지 제목·일부 소제목) S에 없을 수 있다.
-  // 콘텐츠 루트 안 제목은 항상 채택한다(nav/헤더/푸터는 EXCLUDE_NONCONTENT가 이미 제외 → TOC 중복 없음).
+  // 3) 콘텐츠 루트를 원본에서 직접 순회 → 본문(∈S)·콜아웃·제목 채택.
+  //    제목은 Readability가 본문에서 빼는 경우가 있어(페이지 제목·일부 소제목) 별도로 항상 채택
+  //    (nav/헤더/푸터는 EXCLUDE_NONCONTENT가 이미 제외 → TOC 중복 없음).
+  //    코드 블록은 번역하지 않되 "코드 해설" 대상으로 함께 넣고, DOM 순서로 정렬한다.
+  const accepted: Block[] = [];
   for (const b of collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT)) {
     if (proseSet.has(b.text) || isCallout(b.node) || isHeading(b.node)) {
-      paragraphs.push(tag(b, i++));
-      kept.add(b.text);
+      accepted.push(b);
     }
   }
+  for (const b of collectCode(root)) accepted.push(b);
+  accepted.sort(inDomOrder);
+  const paragraphs = accepted.map((b, idx) => tag(b, idx));
 
   // Readability 본문인데 루트 순회에서 못 잡은 수(텍스트 불일치·루트 밖 등) → 진단/폴백 신호.
+  const keptTexts = new Set(accepted.map((b) => b.text));
   let unmappedCount = 0;
-  for (const text of proseSet) if (!kept.has(text)) unmappedCount++;
+  for (const text of proseSet) if (!keptTexts.has(text)) unmappedCount++;
 
   return {
     title: article.title || document.title,
