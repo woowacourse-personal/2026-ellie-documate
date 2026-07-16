@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { genai, EXPLAIN_MODEL } from '../lib/gemini.js';
-import { explanationSystem } from '../lib/prompts.js';
+import { codeExplanationSystem, explanationSystem } from '../lib/prompts.js';
 import { guard, LIMITS } from '../lib/security.js';
 
 // 개념 해설 엔드포인트 (스트리밍). 이 제품의 심장.
@@ -28,15 +28,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? req.body.precedingText.slice(0, LIMITS.MAX_CONTEXT_CHARS)
       : undefined;
 
+  const isCode = req.body?.kind === 'code';
+
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
 
   try {
     const stream = await genai.models.generateContentStream({
       model: EXPLAIN_MODEL,
-      contents: `다음 내용을 초급자에게 해설해줘:\n\n${text}`,
+      contents: isCode
+        ? `다음 코드가 무엇을 하는지 초급자에게 설명해줘:\n\n${text}`
+        : `다음 내용을 초급자에게 해설해줘:\n\n${text}`,
       config: {
-        systemInstruction: explanationSystem({ docTitle, precedingText }),
+        systemInstruction: isCode
+          ? codeExplanationSystem({ docTitle, precedingText })
+          : explanationSystem({ docTitle, precedingText }),
       },
     });
 

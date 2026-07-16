@@ -9,8 +9,8 @@ export const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 //  - 해설: 이 제품의 심장. 이상적으론 상위 Pro지만 gemini-2.5-pro는 무료 티어
 //    한도가 0(결제 필요)이라, 무료로 도는 Flash를 기본으로 둔다.
 //    결제 활성화 후 품질을 더 원하면 EXPLAIN_MODEL을 'gemini-2.5-pro'로 올린다.
-// 번역: 추론이 불필요하고 대량 호출이라 지연·비용이 중요 → 가장 가벼운 flash-lite.
-//   (flash-latest=gemini-3.5-flash는 무료 티어에서 trivial 번역에도 10~20초로 느림)
-// 해설(제품의 심장): 품질 우선 → flash-latest. 결제 활성화 시 pro 상향 검토.
+// 번역·해설 모두 flash-lite: flash-latest(gemini-3.5-flash)는 무료 티어에서 10~20초로 느리고
+// 하루 20요청 한도라 실사용에 부적합. flash-lite는 빠르고 별도 quota. 해설 품질은 실측상 충분.
+// 결제 활성화 시 해설을 상위 모델(pro 등)로 올릴지는 열려 있음.
 export const TRANSLATE_MODEL = 'gemini-flash-lite-latest';
-export const EXPLAIN_MODEL = 'gemini-flash-latest';
+export const EXPLAIN_MODEL = 'gemini-flash-lite-latest';

@@ -11,8 +11,8 @@ for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
   if (m) process.env.GEMINI_API_KEY = m[1].trim();
 }
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const TRANSLATE_MODEL = 'gemini-flash-lite-latest'; // 번역: 가볍고 빠름(lib/gemini.ts와 동기)
-const EXPLAIN_MODEL = 'gemini-flash-latest'; // 해설: 품질 우선
+const TRANSLATE_MODEL = 'gemini-flash-lite-latest'; // 번역·해설 모두 flash-lite(lib/gemini.ts와 동기)
+const EXPLAIN_MODEL = 'gemini-flash-lite-latest'; // flash-latest는 느림+20/day라 lite로 통일
 
 // lib/prompts.ts 와 동일하게 유지
 const TRANSLATION_SYSTEM =
@@ -27,7 +27,25 @@ const explanationSystem = ({ docTitle, precedingText } = {}) =>
     '- 이 문서의 맥락 안에서 설명한다.',
     '- "무엇"보다 "왜/언제 쓰는지"에 무게를 둔다.',
     '- 초급자가 걸리는 전제 지식을 미리 채워준다.',
+    '- 문서에 근거해서만 설명한다. 확실하지 않으면 단정하지 말고, 모르는 건 "문서만으로는 알 수 없다"고 말한다. 없는 API·동작을 지어내지 않는다.',
     '- 쉽고 짧은 한국어로. 서론 없이 핵심부터.',
+    '- 설명은 한국어로 하되, API 이름·코드 식별자·키워드(예: Composable, Modifier)는 원문(영어) 그대로 둔다. 한글로 음역하지 않는다.',
+    '- 마크다운 기호(**, #, -, * 등)를 쓰지 말고 평문으로 쓴다. 문단은 빈 줄로 나눈다.',
+    docTitle ? `문서 제목: ${docTitle}` : '',
+    precedingText ? `앞 문단 맥락: ${precedingText}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+// 코드 해설: 번역이 아니라 "이 코드가 무엇을 하는지" 이해시킨다. (lib/prompts.ts와 동기)
+const codeExplanationSystem = ({ docTitle, precedingText } = {}) =>
+  [
+    '너는 주니어 개발자에게 코드 조각이 무엇을 하는지 설명하는 조력자다.',
+    '- 한 줄씩 번역하지 말고, 이 코드의 목적과 핵심 동작을 이해시킨다. "무엇을 하는가"와 "왜 이렇게 쓰는가".',
+    '- 이 문서의 맥락 안에서 설명한다. 초급자가 걸리는 API·문법 전제는 미리 채워준다.',
+    '- 코드와 문서에 근거해서만 설명한다. 확실하지 않으면 단정하지 말고, 없는 동작·API를 지어내지 않는다.',
+    '- 쉽고 짧은 한국어로. 서론 없이 핵심부터.',
+    '- API 이름·코드 식별자·키워드는 원문(영어) 그대로 둔다. 한글로 음역하지 않는다.',
+    '- 마크다운 기호(**, #, -, * 등)를 쓰지 말고 평문으로 쓴다. 문단은 빈 줄로 나눈다.',
     docTitle ? `문서 제목: ${docTitle}` : '',
     precedingText ? `앞 문단 맥락: ${precedingText}` : '',
   ]
@@ -88,13 +106,20 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.url === '/api/explain') {
-      const { text, docTitle, precedingText } = await readBody(req);
+      const { text, docTitle, precedingText, kind } = await readBody(req);
       if (typeof text !== 'string' || !text) return res.writeHead(400).end();
+      const isCode = kind === 'code';
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       const stream = await genai.models.generateContentStream({
         model: EXPLAIN_MODEL,
-        contents: `다음 내용을 초급자에게 해설해줘:\n\n${text}`,
-        config: { systemInstruction: explanationSystem({ docTitle, precedingText }) },
+        contents: isCode
+          ? `다음 코드가 무엇을 하는지 초급자에게 설명해줘:\n\n${text}`
+          : `다음 내용을 초급자에게 해설해줘:\n\n${text}`,
+        config: {
+          systemInstruction: isCode
+            ? codeExplanationSystem({ docTitle, precedingText })
+            : explanationSystem({ docTitle, precedingText }),
+        },
       });
       for await (const chunk of stream) if (chunk.text) res.write(chunk.text);
       return res.end();

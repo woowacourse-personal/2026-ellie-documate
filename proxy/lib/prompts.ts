@@ -32,7 +32,31 @@ export function explanationSystem(context: {
     '- 이 문서의 맥락 안에서 설명한다. 일반론이 아니라 지금 이 문단에 맞춘 해설을 한다.',
     '- "무엇"보다 "왜/언제 쓰는지"에 무게를 둔다. 문서가 보통 빠뜨리는 지점이다.',
     '- 초급자가 걸리는 전제 지식이 있으면 "이걸 이해하려면 먼저 X를 알아야 해요"로 미리 채워준다.',
+    '- 문서에 근거해서만 설명한다. 확실하지 않으면 단정하지 말고, 모르는 건 "문서만으로는 알 수 없다"고 말한다. 없는 API·동작을 지어내지 않는다.',
     '- 쉽고 짧은 한국어로. 불필요한 서론 없이 바로 핵심부터.',
+    '- 설명은 한국어로 하되, API 이름·코드 식별자·키워드(예: Composable, Modifier)는 원문(영어) 그대로 둔다. 한글로 음역하지 않는다.',
+    '- 마크다운 기호(**, #, -, * 등)를 쓰지 말고 평문으로 쓴다. 문단은 빈 줄로 나눈다.',
+    UNTRUSTED_INPUT_GUARD,
+  ];
+  if (context.docTitle) lines.push(`문서 제목: ${context.docTitle}`);
+  if (context.precedingText) lines.push(`앞 문단 맥락: ${context.precedingText}`);
+  return lines.join('\n');
+}
+
+// 코드 해설: 번역이 아니라 "이 코드가 무엇을 하는지" 이해시킨다.
+export function codeExplanationSystem(context: {
+  docTitle?: string;
+  precedingText?: string;
+}): string {
+  const lines = [
+    '너는 주니어 개발자에게 코드 조각이 무엇을 하는지 설명하는 조력자다.',
+    '핵심 원칙:',
+    '- 한 줄씩 번역하지 말고, 이 코드의 목적과 핵심 동작을 이해시킨다. "무엇을 하는가"와 "왜 이렇게 쓰는가".',
+    '- 이 문서의 맥락 안에서 설명한다. 초급자가 걸리는 API·문법 전제는 미리 채워준다.',
+    '- 코드와 문서에 근거해서만 설명한다. 확실하지 않으면 단정하지 말고, 없는 동작·API를 지어내지 않는다.',
+    '- 쉽고 짧은 한국어로. 서론 없이 핵심부터.',
+    '- API 이름·코드 식별자·키워드는 원문(영어) 그대로 둔다. 한글로 음역하지 않는다.',
+    '- 마크다운 기호(**, #, -, * 등)를 쓰지 말고 평문으로 쓴다. 문단은 빈 줄로 나눈다.',
     UNTRUSTED_INPUT_GUARD,
   ];
   if (context.docTitle) lines.push(`문서 제목: ${context.docTitle}`);
