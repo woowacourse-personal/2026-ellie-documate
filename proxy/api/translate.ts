@@ -17,6 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // 문단마다 1요청 대신 배치 전체를 1요청으로 묶는다 → 비용·요청 한도 절약.
+    const g0 = Date.now();
     const response = await genai.models.generateContent({
       model: TRANSLATE_MODEL,
       contents: JSON.stringify(texts),
@@ -27,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
       },
     });
+    const geminiMs = Date.now() - g0;
     const translations = JSON.parse(response.text ?? '[]');
     if (
       !Array.isArray(translations) ||
@@ -35,6 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('translate length mismatch');
       return res.status(502).json({ error: 'upstream_error' });
     }
+    res.setHeader('X-Gemini-Ms', String(geminiMs)); // 진단: 순수 생성시간
+    res.setHeader('Access-Control-Expose-Headers', 'X-Gemini-Ms');
     return res.status(200).json({ translations });
   } catch (err) {
     console.error('translate error', err);

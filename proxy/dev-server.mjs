@@ -11,8 +11,8 @@ for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
   if (m) process.env.GEMINI_API_KEY = m[1].trim();
 }
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const TRANSLATE_MODEL = 'gemini-flash-latest';
-const EXPLAIN_MODEL = 'gemini-flash-latest';
+const TRANSLATE_MODEL = 'gemini-flash-lite-latest'; // 번역: 가볍고 빠름(lib/gemini.ts와 동기)
+const EXPLAIN_MODEL = 'gemini-flash-latest'; // 해설: 품질 우선
 
 // lib/prompts.ts 와 동일하게 유지
 const TRANSLATION_SYSTEM =
@@ -38,6 +38,7 @@ function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Expose-Headers', 'X-Gemini-Ms'); // 클라가 순수 생성시간 읽게
 }
 const readBody = (req) =>
   new Promise((resolve) => {
@@ -61,6 +62,7 @@ const server = createServer(async (req, res) => {
     if (req.url === '/api/translate') {
       const { texts } = await readBody(req);
       if (!Array.isArray(texts) || texts.length === 0) return res.writeHead(400).end();
+      const g0 = Date.now();
       const r = await genai.models.generateContent({
         model: TRANSLATE_MODEL,
         contents: JSON.stringify(texts),
@@ -71,12 +73,17 @@ const server = createServer(async (req, res) => {
           responseSchema: TRANSLATE_SCHEMA,
         },
       });
+      const geminiMs = Date.now() - g0;
       const translations = JSON.parse(r.text ?? '[]');
       if (!Array.isArray(translations) || translations.length !== texts.length) {
         console.error('translate length mismatch', texts.length, translations.length);
         return res.writeHead(502).end();
       }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      console.log(`[proxy] translate ${texts.length}개 · Gemini ${geminiMs}ms`);
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'X-Gemini-Ms': String(geminiMs),
+      });
       return res.end(JSON.stringify({ translations }));
     }
 
