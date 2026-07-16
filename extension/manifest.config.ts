@@ -3,8 +3,8 @@ import { defineManifest } from '@crxjs/vite-plugin';
 // Documate 크롬 확장 매니페스트 (MV3)
 // 활성화 모델(B안): 사용자가 아이콘을 클릭한 탭에서만 동작한다.
 //   - default_popup을 두지 않아 아이콘 클릭이 background의 action.onClicked로 전달된다.
-//   - content script는 초기 타깃(developer.android.com)에만 주입되며,
-//     클릭 메시지를 받기 전까지는 UI를 그리거나 LLM을 호출하지 않는다(유휴 상태).
+//   - content script는 모든 웹페이지에 주입되지만, 클릭 메시지를 받기 전까지는
+//     리스너 등록만 하고 UI를 그리거나 LLM을 호출하지 않는다(유휴 상태).
 export default defineManifest({
   manifest_version: 3,
   name: 'Documate',
@@ -22,10 +22,10 @@ export default defineManifest({
     type: 'module',
   },
 
-  // 초기 타깃: Android 개발자 문서. 확대 시 matches를 늘린다.
+  // 모든 웹페이지(http/https). 클릭 전엔 유휴 상태라 특정 사이트 제한을 두지 않는다.
   content_scripts: [
     {
-      matches: ['https://developer.android.com/*'],
+      matches: ['http://*/*', 'https://*/*'],
       js: ['src/content/index.ts'],
       run_at: 'document_idle',
     },
