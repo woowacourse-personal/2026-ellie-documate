@@ -7,12 +7,13 @@ import { defineManifest } from '@crxjs/vite-plugin';
 //     리스너 등록만 하고 UI를 그리거나 LLM을 호출하지 않는다(유휴 상태).
 export default defineManifest({
   manifest_version: 3,
-  name: 'Documate',
+  name: 'DocuMate',
   version: '0.0.0',
-  description: '영어 개발 문서를 읽다 막힌 자리에서, 페이지를 떠나지 않고 이해하도록 돕는다',
+  description:
+    '개발 용어와 기술 문맥을 고려해 영어 개발 문서를 자연스럽게 번역하고, 어려운 개념은 해설과 후속 질문으로 이해할 수 있도록 돕는 Chrome 확장 프로그램',
 
   action: {
-    default_title: 'Documate 켜기 / 끄기',
+    default_title: 'DocuMate 켜기 / 끄기',
   },
 
   background: {
