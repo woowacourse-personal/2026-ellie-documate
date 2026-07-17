@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { genai, EXPLAIN_MODEL } from '../lib/gemini.js';
 import { codeExplanationSystem, explanationSystem } from '../lib/prompts.js';
 import { guard, LIMITS, validateHistory } from '../lib/security.js';
+import { checkRateLimit } from '../lib/ratelimit.js';
 
 // 개념 해설(F2) + 후속질문(F3) 엔드포인트 (스트리밍). 이 제품의 심장.
 // 입력: { text, docTitle?, precedingText?, kind?, history?, question? }
@@ -14,6 +15,7 @@ import { guard, LIMITS, validateHistory } from '../lib/security.js';
 // 히스토리는 content가 보관하고 매 요청에 통째로 보낸다 → 프록시는 그대로 Gemini에 넘긴다.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guard(req, res)) return; // CORS·메서드·Origin 검증
+  if (!(await checkRateLimit(req, res))) return; // IP 레이트리밋 (429) — 스트림 시작 전에 검사한다
 
   const text: unknown = req.body?.text;
   if (typeof text !== 'string' || text.length === 0) {

@@ -4,6 +4,7 @@ import { genai, TRANSLATE_MODEL } from '../lib/gemini.js';
 import { translationSystem } from '../lib/prompts.js';
 import { guard, validateTexts } from '../lib/security.js';
 import { cacheEnabled, cacheGetMany, cacheSetMany } from '../lib/cache.js';
+import { checkRateLimit } from '../lib/ratelimit.js';
 
 // 문단 번역 엔드포인트 (비스트리밍, 배치).
 // 입력: { texts: string[], source?: 'drag' | 'paragraph' } → 출력: { translations: string[] }
@@ -11,9 +12,9 @@ import { cacheEnabled, cacheGetMany, cacheSetMany } from '../lib/cache.js';
 //
 // 공용 캐시(사용자 간 공유)를 앞에 둔다: 키가 하나뿐이라 하루 쿼터가 전 사용자의 공유
 // 자원이므로, 캐시가 없으면 같은 문서를 보는 사람 수만큼 쿼터가 마른다. lib/cache.ts 참고.
-// TODO: 레이트리밋(같은 Upstash로 @upstash/ratelimit).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guard(req, res)) return; // CORS·메서드·Origin 검증
+  if (!(await checkRateLimit(req, res))) return; // IP 레이트리밋 (429)
 
   const texts = req.body?.texts as string[] | undefined;
   const invalid = validateTexts(texts);

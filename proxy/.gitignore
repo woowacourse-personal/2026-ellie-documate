@@ -1,0 +1,7 @@
+.vercel
+.env*
+
+# Upstash 통합이 설치한 AI 코딩 도우미용 스킬 문서 — 런타임·배포와 무관
+.agents/
+.claude/
+skills-lock.json

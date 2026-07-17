@@ -19,10 +19,19 @@ const KEY_VERSION = 'v1';
 const TTL_SECONDS = 60 * 60 * 24 * 90; // 90일 — 문서가 개정되면 원문이 바뀌어 키도 바뀐다
 
 // 환경변수가 없으면 캐시 없이 동작한다(로컬 개발·Upstash 미설정).
-// Redis.fromEnv()는 변수가 없으면 throw하므로 미리 확인한다.
-const enabled =
-  !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
-const redis = enabled ? Redis.fromEnv() : undefined;
+//
+// ⚠️ `Redis.fromEnv()`를 쓰지 않는다. fromEnv()는 `UPSTASH_REDIS_REST_URL`/`TOKEN`을 읽는데,
+// **Vercel Marketplace가 주입하는 이름은 `KV_REST_API_URL`/`KV_REST_API_TOKEN`이다**
+// (옛 @vercel/kv 호환 이름). fromEnv()를 쓰면 변수가 있어도 못 찾아 캐시가 영영 꺼진 채로
+// 돌고, fail-open이라 에러 하나 없이 조용히 지나간다. 둘 다 받아준다.
+const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+const token =
+  process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+const enabled = !!url && !!token;
+const redis = enabled ? new Redis({ url: url!, token: token! }) : undefined;
+
+// 레이트리밋(lib/ratelimit.ts)이 **같은 인스턴스**를 쓴다 — 통합 하나로 캐시와 방어를 함께 얻는다.
+export const redisClient = redis;
 
 export function cacheEnabled(): boolean {
   return enabled;
