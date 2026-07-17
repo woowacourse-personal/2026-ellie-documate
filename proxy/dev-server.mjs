@@ -115,10 +115,15 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.url === '/api/explain') {
-      const { text, docTitle, precedingText, kind, history, question } =
+      const { text, docTitle, precedingText, kind, history, question, source } =
         await readBody(req);
       if (typeof text !== 'string' || !text) return res.writeHead(400).end();
       const isCode = kind === 'code';
+      // 검증 지표 로그 — 열거값만 남긴다(api/explain.ts와 동기)
+      const src = source === 'drag' || source === 'paragraph' ? source : 'unknown';
+      console.log(
+        `[proxy] explain source=${src} kind=${isCode ? 'code' : 'concept'} followup=${question !== undefined}`,
+      );
       // 후속질문(F3): [최초 요청] + [지금까지의 대화] + [이번 질문] (api/explain.ts와 동기)
       const contents = [
         {

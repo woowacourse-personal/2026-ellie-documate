@@ -188,6 +188,7 @@ function shell(opts: DragPopupOptions, close: () => void): HTMLElement {
     docTitle: opts.docTitle,
     precedingText: opts.precedingText,
     kind: 'concept',
+    source: 'drag',
   } satisfies ExplainRequest;
 
   toggle.addEventListener(

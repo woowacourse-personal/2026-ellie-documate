@@ -55,6 +55,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const isCode = req.body?.kind === 'code';
 
+  // 검증 지표(PLAN §5 "드래그 vs 문단 버튼 중 뭘 더 자연스럽게 쓰는가").
+  // 클라이언트가 보낸 값이므로 아는 값만 통과시킨다. 프롬프트에는 넣지 않는다 — 세는 데만 쓴다.
+  const source =
+    req.body?.source === 'drag' || req.body?.source === 'paragraph'
+      ? req.body.source
+      : 'unknown';
+  // 남기는 건 열거값뿐이다. 페이지 텍스트·제목·사용자 식별자는 절대 로그에 넣지 않는다
+  // (신뢰 불가 데이터인 데다, 사내 문서를 드래그했을 수도 있다).
+  console.log(
+    `explain source=${source} kind=${isCode ? 'code' : 'concept'} followup=${req.body?.question !== undefined}`,
+  );
+
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
 

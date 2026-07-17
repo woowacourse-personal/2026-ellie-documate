@@ -47,6 +47,10 @@ export interface ExplainRequest {
   docTitle?: string; // 문서 제목(맥락)
   precedingText?: string; // 앞 문단(맥락)
   kind?: 'concept' | 'code'; // 개념 해설(기본) vs "이 코드가 무엇을 하는지" 해설
+  // 검증 지표용(documate.md §9 / PLAN §5): "드래그 vs 문단 버튼 중 뭘 더 자연스럽게 쓰는가".
+  // 이게 없으면 두 경로가 프록시에서 완전히 똑같이 보여 구분할 방법이 없다.
+  // 프롬프트에는 넣지 않는다 — 세는 데만 쓴다.
+  source?: 'drag' | 'paragraph';
   // 아래 둘은 후속질문(F3)에서만. 최초 해설 요청에는 없다.
   history?: ExplainTurn[]; // 지금까지의 대화(최초 해설 답변부터 = 'model'로 시작)
   question?: string; // 이번에 물어보는 후속 질문

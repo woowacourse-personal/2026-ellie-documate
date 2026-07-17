@@ -91,6 +91,7 @@ function expand(root: ShadowRoot, p: Paragraph, ctx: ExplainContext): void {
     docTitle: ctx.docTitle,
     precedingText: ctx.precedingText,
     kind: ctx.kind ?? 'concept',
+    source: 'paragraph',
   } satisfies ExplainRequest;
 
   const convo = createConversation(base, {
