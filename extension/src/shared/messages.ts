@@ -14,6 +14,10 @@ export interface TranslateItem {
 export interface TranslateRequest {
   type: 'DOCUMATE_TRANSLATE';
   items: TranslateItem[];
+  // 드래그로 선택한 텍스트는 **공용 캐시에 저장하지 않는다** — 드래그는 아무 페이지에서나
+  // 동작하므로 사내 위키·비공개 문서의 문장일 수 있고, 그게 우리 서버에 쌓이면 안 된다.
+  // (로컬 캐시는 사용자 자기 브라우저라 무관하다. 공용 캐시 조회는 해도 된다 — 저장만 막는다.)
+  source?: 'drag' | 'paragraph';
 }
 
 // service worker → content: 번역 결과 (id로 매칭)

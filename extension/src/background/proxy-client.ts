@@ -25,14 +25,17 @@ export interface ProxyResult {
   geminiMs: number;
 }
 
-export async function translateViaProxy(texts: string[]): Promise<ProxyResult> {
+export async function translateViaProxy(
+  texts: string[],
+  source: 'drag' | 'paragraph',
+): Promise<ProxyResult> {
   const out: TranslateOutcome[] = [];
   let geminiMs = 0;
   for (let i = 0; i < texts.length; i += TRANSLATE_BATCH) {
     const chunk = texts.slice(i, i + TRANSLATE_BATCH);
     const t0 = Date.now();
     try {
-      const r = await translateChunk(chunk);
+      const r = await translateChunk(chunk, source);
       geminiMs += r.geminiMs;
       console.log(
         `[Documate BG] 청크 ${chunk.length}개 성공 · 프록시왕복 ${Date.now() - t0}ms · Gemini ${r.geminiMs}ms`,
@@ -52,6 +55,7 @@ export async function translateViaProxy(texts: string[]): Promise<ProxyResult> {
 // 청크 하나를 재시도와 함께 번역. 일시적 오류만 재시도하고 4xx는 즉시 포기.
 async function translateChunk(
   chunk: string[],
+  source: 'drag' | 'paragraph',
 ): Promise<{ translations: string[]; geminiMs: number }> {
   let lastErr: Error | undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -60,7 +64,7 @@ async function translateChunk(
       res = await fetch(`${PROXY_BASE_URL}/api/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texts: chunk }),
+        body: JSON.stringify({ texts: chunk, source }),
       });
     } catch (e) {
       lastErr = new Error('네트워크 오류 (프록시 미실행?)');

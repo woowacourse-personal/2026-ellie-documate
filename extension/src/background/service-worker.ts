@@ -53,7 +53,7 @@ chrome.action.onClicked.addListener((tab) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (isMessage(message) && message.type === 'DOCUMATE_TRANSLATE') {
-    handleTranslate(message.items)
+    handleTranslate(message.items, message.source ?? 'paragraph')
       .then(sendResponse)
       .catch((e) => {
         const reason = e instanceof Error ? e.message : String(e);
@@ -75,6 +75,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 async function handleTranslate(
   items: TranslateItem[],
+  source: 'drag' | 'paragraph',
 ): Promise<TranslateResponse> {
   const results: TranslateResponse['results'] = [];
   const uncached: TranslateItem[] = [];
@@ -98,6 +99,7 @@ async function handleTranslate(
     const t0 = Date.now();
     const { outcomes, geminiMs: gm } = await translateViaProxy(
       uncached.map((i) => i.text),
+      source,
     );
     proxyMs = Date.now() - t0;
     geminiMs = gm;

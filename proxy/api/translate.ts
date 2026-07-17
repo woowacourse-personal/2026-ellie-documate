@@ -3,24 +3,51 @@ import { Type } from '@google/genai';
 import { genai, TRANSLATE_MODEL } from '../lib/gemini.js';
 import { translationSystem } from '../lib/prompts.js';
 import { guard, validateTexts } from '../lib/security.js';
+import { cacheEnabled, cacheGetMany, cacheSetMany } from '../lib/cache.js';
 
 // 문단 번역 엔드포인트 (비스트리밍, 배치).
-// 입력: { texts: string[] }  → 출력: { translations: string[] }
-// 뷰포트에 보이는 문단만 확장에서 모아 보내고, 여기서 병렬 번역한다.
-// TODO(Phase 2): 공용 캐시 연동, 레이트리밋, 문서 맥락 전달.
+// 입력: { texts: string[], source?: 'drag' | 'paragraph' } → 출력: { translations: string[] }
+// 확장이 추출한 문단을 청크로 모아 보내면 여기서 배치 번역한다.
+//
+// 공용 캐시(사용자 간 공유)를 앞에 둔다: 키가 하나뿐이라 하루 쿼터가 전 사용자의 공유
+// 자원이므로, 캐시가 없으면 같은 문서를 보는 사람 수만큼 쿼터가 마른다. lib/cache.ts 참고.
+// TODO: 레이트리밋(같은 Upstash로 @upstash/ratelimit).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guard(req, res)) return; // CORS·메서드·Origin 검증
 
-  const texts = req.body?.texts;
+  const texts = req.body?.texts as string[] | undefined;
   const invalid = validateTexts(texts);
   if (invalid) return res.status(400).json({ error: invalid.error });
 
+  // 드래그 선택은 공용 캐시에 **저장하지 않는다**(사내 문서일 수 있다). 조회는 해도 된다.
+  const store = req.body?.source !== 'drag';
+
+  const all = texts as string[];
+
   try {
-    // 문단마다 1요청 대신 배치 전체를 1요청으로 묶는다 → 비용·요청 한도 절약.
+    // 1) 공용 캐시 조회(MGET 1회). 적중분은 Gemini를 아예 안 부른다.
+    const cached = await cacheGetMany(all);
+    const missIdx: number[] = [];
+    for (let i = 0; i < all.length; i++) {
+      if (cached[i] === undefined) missIdx.push(i);
+    }
+    const hits = all.length - missIdx.length;
+
+    // 전부 적중 → 쿼터 소모 0
+    if (missIdx.length === 0) {
+      console.log(`translate ${all.length}개 · 캐시 전부 적중 · Gemini 호출 없음`);
+      res.setHeader('X-Gemini-Ms', '0');
+      res.setHeader('X-Cache-Hits', String(hits));
+      res.setHeader('Access-Control-Expose-Headers', 'X-Gemini-Ms, X-Cache-Hits');
+      return res.status(200).json({ translations: cached as string[] });
+    }
+
+    // 2) 미적중만 번역한다. 문단마다 1요청 대신 배치 전체를 1요청으로 묶는다.
+    const missTexts = missIdx.map((i) => all[i]);
     const g0 = Date.now();
     const response = await genai.models.generateContent({
       model: TRANSLATE_MODEL,
-      contents: JSON.stringify(texts),
+      contents: JSON.stringify(missTexts),
       config: {
         systemInstruction: translationSystem(),
         // 번역은 창작이 아니다. 기본값(1.0)이면 같은 문장이 매번 다르게 나오고
@@ -34,16 +61,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
     const geminiMs = Date.now() - g0;
-    const translations = JSON.parse(response.text ?? '[]');
-    if (
-      !Array.isArray(translations) ||
-      translations.length !== (texts as string[]).length
-    ) {
+    const fresh = JSON.parse(response.text ?? '[]');
+    if (!Array.isArray(fresh) || fresh.length !== missTexts.length) {
       console.error('translate length mismatch');
       return res.status(502).json({ error: 'upstream_error' });
     }
+
+    // 3) 캐시 적중분과 새로 번역한 것을 원래 순서로 합친다.
+    const translations = [...cached] as string[];
+    missIdx.forEach((idx, k) => {
+      translations[idx] = fresh[k];
+    });
+
+    // 4) 새로 번역한 것만 저장. 드래그 선택은 저장하지 않는다(사내 문서일 수 있다).
+    if (store) {
+      await cacheSetMany(
+        missIdx.map((idx, k) => ({ text: all[idx], translation: fresh[k] })),
+      );
+    }
+    console.log(
+      `translate ${all.length}개 · 캐시적중 ${hits} · 신규 ${missIdx.length} · Gemini ${geminiMs}ms · 저장 ${store ? 'O' : 'X(드래그)'} · 캐시 ${cacheEnabled() ? 'on' : 'off'}`,
+    );
+
     res.setHeader('X-Gemini-Ms', String(geminiMs)); // 진단: 순수 생성시간
-    res.setHeader('Access-Control-Expose-Headers', 'X-Gemini-Ms');
+    res.setHeader('X-Cache-Hits', String(hits));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Gemini-Ms, X-Cache-Hits');
     return res.status(200).json({ translations });
   } catch (err) {
     console.error('translate error', err);

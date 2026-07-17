@@ -39,6 +39,7 @@ export async function translateOnce(text: string): Promise<string> {
   const req: TranslateRequest = {
     type: 'DOCUMATE_TRANSLATE',
     items: [{ id: 'drag', text }],
+    source: 'drag', // 공용 캐시에 저장하지 않는다(사내 문서일 수 있다)
   };
   const res = (await chrome.runtime.sendMessage(req)) as TranslateResponse;
   const r = res.results[0];
@@ -80,6 +81,7 @@ export function createTranslator(
     const req: TranslateRequest = {
       type: 'DOCUMATE_TRANSLATE',
       items: chunk.map((p) => ({ id: p.id, text: p.text })),
+      source: 'paragraph',
     };
 
     const tSend = performance.now();
