@@ -57,7 +57,35 @@ export const LIMITS = {
   MAX_TOTAL_CHARS: 60_000, // 배치 전체 합계
   MAX_CONTEXT_CHARS: 2_000, // 해설 앞문단 맥락
   MAX_TITLE_CHARS: 300,
+  // 후속질문(F3) — 히스토리를 매 요청에 통째로 보내므로 대화가 길수록 비용이 는다.
+  MAX_QUESTION_CHARS: 1_000, // 후속질문 1건
+  MAX_HISTORY_TURNS: 12, // 대화 턴 수 상한(≈ 후속질문 6회)
+  MAX_HISTORY_CHARS: 24_000, // 히스토리 전체 합계
 } as const;
+
+// 후속질문 히스토리 검증. 문제가 있으면 오류 메시지, 없으면 null.
+// 클라이언트가 보낸 배열이므로 role·타입·길이를 전부 확인한다(신뢰하지 않는다).
+export function validateHistory(value: unknown): { error: string } | null {
+  if (!Array.isArray(value)) return { error: 'history must be an array' };
+  if (value.length > LIMITS.MAX_HISTORY_TURNS) return { error: 'history too long' };
+  let total = 0;
+  for (const turn of value) {
+    if (typeof turn !== 'object' || turn === null) {
+      return { error: 'history turn must be an object' };
+    }
+    const { role, text } = turn as { role?: unknown; text?: unknown };
+    if (role !== 'user' && role !== 'model') {
+      return { error: 'history role must be user|model' };
+    }
+    if (typeof text !== 'string' || text.length === 0) {
+      return { error: 'history text must be a non-empty string' };
+    }
+    if (text.length > LIMITS.MAX_TEXT_CHARS) return { error: 'history text too long' };
+    total += text.length;
+  }
+  if (total > LIMITS.MAX_HISTORY_CHARS) return { error: 'history too large' };
+  return null;
+}
 
 // 번역 배치 검증. 문제가 있으면 오류 메시지, 없으면 null.
 export function validateTexts(value: unknown): { error: string } | null {
