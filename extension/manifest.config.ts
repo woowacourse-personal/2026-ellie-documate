@@ -34,6 +34,7 @@ export default defineManifest({
   // storage: 번역 결과 로컬 캐시(같은 문단 재번역 방지).
   permissions: ['activeTab', 'storage'],
 
-  // 우리 프록시 호출 허용. 로컬 개발용 localhost — 배포 시 프록시 URL 추가/교체.
-  host_permissions: ['http://localhost:3000/*'],
+  // 우리 프록시 호출 허용. 프로덕션 프록시 URL. 로컬에서 프록시를 고칠 땐
+  // 'http://localhost:3000/*'를 잠깐 추가한다(PROXY_BASE_URL도 함께).
+  host_permissions: ['https://documate-proxy-jo-eungyeongs-projects.vercel.app/*'],
 });
