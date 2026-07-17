@@ -179,7 +179,14 @@ function collectCode(root: ParentNode): Block[] {
 // (compose 랜딩의 설명 카드 26개 중 S에 든 건 4개뿐). S만으로 거르면 같은 UI인데
 // 일부만 번역되는 불일치가 생긴다 — 사용자 눈엔 그냥 고장이다.
 // class가 빈 div는 신뢰 목록에 넣지 않는다(넣으면 class 없는 모든 div가 통과한다).
-function collectTextDivs(root: ParentNode, proseSet: Set<string>): Block[] {
+// taken: 이미 다른 블록(제목·본문·콜아웃)이 잡은 텍스트. div가 그걸 또 잡으면 중복이다.
+// 실제 사례: 문서 프레임워크가 제목마다 앵커 링크용 빈 <div>를 두는데(platform.claude.com의
+// "group relative …" 래퍼), 그 div 텍스트가 제목과 같아 <h2>+<div> 두 벌로 번역됐다.
+function collectTextDivs(
+  root: ParentNode,
+  proseSet: Set<string>,
+  taken: Set<string>,
+): Block[] {
   // 후보: 텍스트를 직접 담은 "가장 안쪽" div
   const candidates: { node: HTMLElement; text: string; cls: string }[] = [];
   for (const node of root.querySelectorAll<HTMLElement>('div')) {
@@ -191,6 +198,7 @@ function collectTextDivs(root: ParentNode, proseSet: Set<string>): Block[] {
     if (isLinkLabel(node)) continue; // "Learn more" 같은 버튼/링크 라벨
     const text = normalize(node.textContent ?? '');
     if (!looksLikeProse(text)) continue; // 라벨·배지("js", "Airbnb")는 문서 내용이 아니다
+    if (taken.has(text)) continue; // 이미 제목·본문이 잡은 텍스트 → 중복 방지
     candidates.push({ node, text, cls: normalize(node.className) });
   }
 
@@ -202,8 +210,10 @@ function collectTextDivs(root: ParentNode, proseSet: Set<string>): Block[] {
 
   const out: Block[] = [];
   for (const c of candidates) {
+    if (taken.has(c.text)) continue; // div끼리도 같은 텍스트 두 번은 막는다
     if (proseSet.has(c.text) || trusted.has(c.cls)) {
       out.push({ node: c.node, text: c.text, kind: 'text' });
+      taken.add(c.text);
     }
   }
   return out;
@@ -320,7 +330,9 @@ export function extractParagraphs(): ExtractResult {
     }
   }
   for (const b of collectHeadings()) accepted.push(b);
-  for (const b of collectTextDivs(root, proseSet)) accepted.push(b);
+  // div 수집은 이미 잡힌 텍스트(제목·본문)를 중복으로 잡지 않도록 taken을 넘긴다.
+  const takenText = new Set(accepted.map((b) => b.text));
+  for (const b of collectTextDivs(root, proseSet, takenText)) accepted.push(b);
   for (const b of collectCode(root)) accepted.push(b);
   accepted.sort(inDomOrder);
   const paragraphs = accepted.map((b, idx) => tag(b, idx));
