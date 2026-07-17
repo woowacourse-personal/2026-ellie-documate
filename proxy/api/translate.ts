@@ -23,6 +23,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contents: JSON.stringify(texts),
       config: {
         systemInstruction: translationSystem(),
+        // 번역은 창작이 아니다. 기본값(1.0)이면 같은 문장이 매번 다르게 나오고
+        // (실측: 5번 요청 → 5가지 결과) 식별자까지 번역돼 "API 이름은 원문 유지" 규칙이
+        // 깨진다(Modifier → 수식어/수정자). 0이면 5번 모두 동일 + 규칙 준수.
+        // 청크가 병렬로 나가므로 페이지 안에서 용어가 갈리는 것도 이걸로 줄인다.
+        temperature: 0,
         thinkingConfig: { thinkingBudget: 0 }, // 번역엔 사고 불필요 — 비용/지연 절약
         responseMimeType: 'application/json',
         responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },

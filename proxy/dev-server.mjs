@@ -94,6 +94,7 @@ const server = createServer(async (req, res) => {
         contents: JSON.stringify(texts),
         config: {
           systemInstruction: TRANSLATION_SYSTEM,
+          temperature: 0, // 번역 일관성 — api/translate.ts와 동기(주석은 그쪽 참고)
           thinkingConfig: { thinkingBudget: 0 },
           responseMimeType: 'application/json',
           responseSchema: TRANSLATE_SCHEMA,
