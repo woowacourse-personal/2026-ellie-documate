@@ -74,6 +74,12 @@ export function showTranslationError(p: Paragraph): void {
   render(p, '번역을 불러오지 못했어요.', 'error');
 }
 
-export function removeAllTranslations(): void {
-  for (const host of document.querySelectorAll(`[${UI_MARKER}]`)) host.remove();
+// 문단에 붙인 주입 UI(번역 블록 + 해설 패널)를 전부 제거한다. 재추출·비활성화 때 호출.
+// 문단에 매인 것만 지운다 — 드래그 팝업(documate-drag)은 문단과 무관하게 살아있어야 하므로
+// `[data-documate-ui]` 전체가 아니라 이 두 엘리먼트만 노린다.
+// (SPA 재추출이 진행 중인 드래그 대화를 날려버리면 안 된다.)
+export function removeAllParagraphUI(): void {
+  for (const host of document.querySelectorAll('documate-tr, documate-ex')) {
+    host.remove();
+  }
 }

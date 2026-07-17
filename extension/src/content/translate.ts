@@ -2,7 +2,7 @@ import type { Paragraph } from './extract';
 import type { TranslateRequest, TranslateResponse } from '../shared/messages';
 import { TRANSLATE_BATCH } from '../shared/config';
 import {
-  removeAllTranslations,
+  removeAllParagraphUI,
   showTranslation,
   showTranslationError,
   showTranslationLoading,
@@ -31,6 +31,21 @@ const DEBOUNCE_MS = 150;
 const MIN_WORDS_FOR_EXPLAIN = 4;
 function looksLikeSentence(text: string): boolean {
   return text.trim().split(/\s+/).length >= MIN_WORDS_FOR_EXPLAIN;
+}
+
+// 단발 번역(F4 드래그 폴백용). 문단 파이프라인과 달리 배치·디바운스 없이 1건만 보낸다.
+// SW를 거치므로 로컬 캐시·프록시 경로는 문단 번역과 똑같이 탄다.
+export async function translateOnce(text: string): Promise<string> {
+  const req: TranslateRequest = {
+    type: 'DOCUMATE_TRANSLATE',
+    items: [{ id: 'drag', text }],
+  };
+  const res = (await chrome.runtime.sendMessage(req)) as TranslateResponse;
+  const r = res.results[0];
+  if (!r || r.error || !r.translation) {
+    throw new Error(r?.reason ?? '결과 없음');
+  }
+  return r.translation;
 }
 
 export function createTranslator(
@@ -116,7 +131,7 @@ export function createTranslator(
   function destroy(): void {
     disposed = true;
     if (timer) clearTimeout(timer);
-    removeAllTranslations();
+    removeAllParagraphUI();
   }
 
   return { enqueue, destroy };
