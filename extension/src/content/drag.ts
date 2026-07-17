@@ -11,7 +11,10 @@ import {
 //
 // 아이콘을 누른 탭에서만 켜진다(activeTab). 끄면 리스너·팝업 모두 정리한다.
 
-const MIN_LEN = 5; // 이보다 짧은 선택은 무시(단어 클릭·오조작)
+// 짧은 용어일수록 오히려 막히는 자리다(API, UI, js, DOM…) → 2자까지 받는다.
+// 1자를 막는 이유는 오조작 때문만이 아니다: 팝업이 뜨는 즉시 번역을 요청하므로
+// 헛 팝업 하나 = 헛 LLM 호출 하나다. 1자짜리 선택은 사실상 전부 실수다.
+const MIN_LEN = 2;
 const MAX_LEN = 6_000; // 프록시 LIMITS.MAX_TEXT_CHARS와 맞춘다
 const CONTEXT_MAX = 2_000; // 프록시 LIMITS.MAX_CONTEXT_CHARS와 맞춘다
 
