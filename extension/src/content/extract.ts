@@ -160,6 +160,78 @@ function collectCode(root: ParentNode): Block[] {
   return out;
 }
 
+// 텍스트를 <p>가 아니라 <div>에 직접 담는 페이지(랜딩·카드형)를 위한 수집.
+//   developer.android.com 랜딩: <div class="devsite-landing-row-item-description-content">설명</div>
+// 이런 설명은 BLOCK_SELECTOR에 안 걸려 통째로 누락됐다(compose 랜딩: 설명 26개 전부 누락).
+//
+// 왜 WALK_SELECTOR에 div를 넣지 않고 따로 도는가:
+//   div를 순회 셀렉터에 넣으면 leaf 판정이 바뀌어 **콜아웃이 깨진다**.
+//   <aside>가 안에 div를 갖는 순간 leaf가 아니게 되고, aside는 Readability가 버려서
+//   S에도 없으니 그 안의 div도 채택되지 않는다 → 콜아웃이 통째로 사라진다.
+//   <li><div>텍스트</div></li> 같은 구조도 kind가 list-item에서 text로 바뀐다.
+//
+// 안전장치: div는 페이지 어디에나 있으므로 무조건 채택하면 사이드바·배지·푸터 잡음이 쏟아진다.
+// 채택 조건은 두 가지다.
+//   (a) 텍스트가 S(Readability 화이트리스트)에 있다 → 본문이 확실하다.
+//   (b) (a)를 통과한 div와 **class가 같다** → 같은 성격의 콘텐츠로 본다.
+//
+// (b)가 왜 필요한가: Readability는 같은 카드 묶음에서도 일부만 본문으로 인정한다
+// (compose 랜딩의 설명 카드 26개 중 S에 든 건 4개뿐). S만으로 거르면 같은 UI인데
+// 일부만 번역되는 불일치가 생긴다 — 사용자 눈엔 그냥 고장이다.
+// class가 빈 div는 신뢰 목록에 넣지 않는다(넣으면 class 없는 모든 div가 통과한다).
+function collectTextDivs(root: ParentNode, proseSet: Set<string>): Block[] {
+  // 후보: 텍스트를 직접 담은 "가장 안쪽" div
+  const candidates: { node: HTMLElement; text: string; cls: string }[] = [];
+  for (const node of root.querySelectorAll<HTMLElement>('div')) {
+    if (node.closest(EXCLUDE_NONCONTENT)) continue;
+    if (isPageBanner(node)) continue; // 페이지 상단 바(섹션 header 안 설명은 통과)
+    if (node.closest(OUR_UI)) continue;
+    // 블록(p/li/h/aside…)이나 다른 div를 품고 있으면 그쪽이 담당한다.
+    if (node.querySelector(`${WALK_SELECTOR}, div`)) continue;
+    if (isLinkLabel(node)) continue; // "Learn more" 같은 버튼/링크 라벨
+    const text = normalize(node.textContent ?? '');
+    if (!looksLikeProse(text)) continue; // 라벨·배지("js", "Airbnb")는 문서 내용이 아니다
+    candidates.push({ node, text, cls: normalize(node.className) });
+  }
+
+  // S를 통과한 후보의 class = "이 페이지에서 본문을 담는 class"
+  const trusted = new Set<string>();
+  for (const c of candidates) {
+    if (c.cls && proseSet.has(c.text)) trusted.add(c.cls);
+  }
+
+  const out: Block[] = [];
+  for (const c of candidates) {
+    if (proseSet.has(c.text) || trusted.has(c.cls)) {
+      out.push({ node: c.node, text: c.text, kind: 'text' });
+    }
+  }
+  return out;
+}
+
+// 링크·버튼 라벨만 든 div인가. 랜딩 페이지는 카드마다 "Learn more" 버튼을 div로 감싸는데
+// (devsite-landing-row-item-buttons), 이건 문서 산문이 아니라 UI라 번역 대상이 아니다.
+// 링크·버튼을 걷어낸 뒤 텍스트가 남지 않으면 라벨로 본다.
+// (카드 설명 안의 인라인 링크는 나머지 산문이 남으므로 통과한다.)
+// div에서 건질 값이 있는 "산문"인가.
+//
+// <p>·<li>·<h1>은 태그 자체가 "여기 글이 있다"는 신호지만 <div>는 아무 의미도 없다.
+// 그래서 div는 내용으로 판단해야 한다: 한 단어짜리 텍스트는 문서 내용이 아니라 라벨이다.
+//   MDN: <div class="example-header">js</div>  ← 코드블록 언어 표시
+//   android 랜딩: <div class="…-icon-label">Airbnb</div>  ← 앱 아이콘 이름
+// 둘 다 번역해봐야 원문 그대로 나오고, 코드블록·아이콘마다 번역 블록만 붙는다.
+// 반면 카드 제목("Compose for Wear OS")·설명은 두 단어 이상이라 통과한다.
+const MIN_WORDS_FOR_DIV = 2;
+function looksLikeProse(text: string): boolean {
+  return text.split(/\s+/).filter(Boolean).length >= MIN_WORDS_FOR_DIV;
+}
+
+function isLinkLabel(node: HTMLElement): boolean {
+  const clone = node.cloneNode(true) as HTMLElement;
+  for (const el of clone.querySelectorAll('a, button, [role="button"]')) el.remove();
+  return normalize(clone.textContent ?? '').length < MIN_TEXT_LEN;
+}
+
 // 문서(DOM) 등장 순서 비교자 — 본문·콜아웃·코드를 제자리로 섞어 정렬.
 function inDomOrder(a: Block, b: Block): number {
   if (a.node === b.node) return 0;
@@ -248,6 +320,7 @@ export function extractParagraphs(): ExtractResult {
     }
   }
   for (const b of collectHeadings()) accepted.push(b);
+  for (const b of collectTextDivs(root, proseSet)) accepted.push(b);
   for (const b of collectCode(root)) accepted.push(b);
   accepted.sort(inDomOrder);
   const paragraphs = accepted.map((b, idx) => tag(b, idx));
