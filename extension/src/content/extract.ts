@@ -35,22 +35,22 @@ export interface ExtractResult {
 // 본문 문단 후보(프로세). S 구성과 원본 색인·leaf 판정에 쓴다.
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, blockquote';
 // 콜아웃(Note/Warning 박스 등): Readability가 비본문으로 제거하는 경우가 많다.
-// 내부에 <p>가 없는 형태(android aside)는 여기서 leaf로 직접 잡는다.
-const CALLOUT_SELECTOR = [
-  'aside', // note/warning/caution/key-point 등 콜아웃 전반
-  '.notecard', // MDN
-  '[class*="admonition"]', // Docusaurus, Sphinx/Read the Docs
-  '.callout', // 여러 문서 테마 공통
-  '.markdown-alert', // GitHub 렌더링
-  '[role="note"]', // ARIA
-].join(', ');
+// 내부에 <p>가 없는 형태(aside 안에 <strong>+<span>만 있는 식)는 여기서 leaf로 직접 잡는다.
+//
+// **표준 선택자만 쓴다.** 사이트별 class(.notecard, .markdown-alert, [class*=admonition] …)를
+// 넣지 않는다 — 특정 사이트에만 맞춘 설정은 나머지 웹을 조용히 차별하고, 사이트가 class를
+// 바꾸면 소리 없이 죽는다. class를 가진 콜아웃은 대개 안에 <p>를 갖고 있고 그 <p>가 S에
+// 들어오므로 일반 경로로 잡힌다.
+const CALLOUT_SELECTOR = 'aside, [role="note"]';
 // 루트 순회 대상 = 본문 블록 + 콜아웃.
 const WALK_SELECTOR = `${BLOCK_SELECTOR}, ${CALLOUT_SELECTOR}`;
 // 코드/표는 번역 대상이 아니다.
 const EXCLUDE_CODE = 'pre, code, table';
-// 루트 안이라도 네비/헤더/푸터/보조영역은 본문이 아니다.
+// 루트 안이라도 네비/푸터/보조영역은 본문이 아니다.
+// <header>는 여기 넣지 않는다 — 페이지 배너일 수도, 섹션 제목 묶음일 수도 있어서
+// 통째로 빼면 섹션 제목이 사라진다. isPageBanner()가 따로 가른다.
 const EXCLUDE_NONCONTENT =
-  'pre, code, table, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+  'pre, code, table, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
 const OUR_UI = '#documate-root, [data-documate-ui]';
 const MIN_TEXT_LEN = 2;
 
@@ -69,6 +69,7 @@ function collectBlocks(
   const out: Block[] = [];
   for (const node of root.querySelectorAll<HTMLElement>(selector)) {
     if (node.closest(exclude)) continue;
+    if (isPageBanner(node)) continue; // 페이지 상단 바(섹션 header는 통과)
     if (node.querySelector(selector)) continue; // 중첩 블록의 상위 → leaf만
     if (node.closest(OUR_UI)) continue; // 우리 주입 UI
     const text = blockText(node);
@@ -94,6 +95,46 @@ function blockText(node: HTMLElement): string {
 
 function isHeading(node: HTMLElement): boolean {
   return /^H[1-6]$/.test(node.tagName);
+}
+
+// 이 노드가 "페이지 배너" <header> 안인가.
+//
+// <header>는 두 가지로 쓰인다:
+//   (a) 페이지 상단 바 — 로고·검색·계정 메뉴. 본문이 아니다. (github.com의 <header>)
+//   (b) 섹션의 제목 묶음 — <section><header><h2>제목</h2></header>…</section>. 본문이다.
+// HTML 명세상 <header>의 암묵 role=banner는 article/aside/main/nav/section 안에
+// **있지 않을 때만**이다. 그 기준을 그대로 쓴다.
+//
+// 왜 중요한가: <header>를 통째로 제외하면 (b)가 같이 죽는다. 랜딩 페이지의 섹션 제목
+// ("Featured resources", "Join the Compose community" 등 5개)이 전부 여기 들어있어
+// 번역에서 빠지고 있었다.
+function isPageBanner(node: HTMLElement): boolean {
+  const header = node.closest('header');
+  if (!header) return false;
+  return !header.parentElement?.closest('article, aside, main, nav, section');
+}
+
+// 제목은 문서 전체에서 수집한다(콘텐츠 루트 안이 아니어도).
+//
+// 왜 루트에 가두지 않나: 제목은 본문 컨테이너 밖에 놓이는 경우가 흔하다. 페이지 제목(H1)은
+// 헤더 영역이나 article 바깥에 있고, Readability도 H1을 본문에서 빼 title로 승격시킨다
+// (실측: 정제본에 H1이 아예 없다). 루트 순회에만 의존하면 페이지에 따라 제목이 통째로 빠진다.
+// 또 제목은 S(화이트리스트) 검사도 하지 않는다 — Readability가 H1을 본문에서 제거하므로
+// S에 있을 수가 없다.
+//
+// 대신 nav/헤더/푸터/보조영역은 제외한다(목차·사이드바 제목 중복 방지).
+const HEADING_SELECTOR = 'h1, h2, h3, h4';
+function collectHeadings(): Block[] {
+  const out: Block[] = [];
+  for (const node of document.querySelectorAll<HTMLElement>(HEADING_SELECTOR)) {
+    if (node.closest(EXCLUDE_NONCONTENT)) continue;
+    if (isPageBanner(node)) continue; // 페이지 상단 바(섹션 header는 통과)
+    if (node.closest(OUR_UI)) continue;
+    const text = blockText(node);
+    if (text.length < MIN_TEXT_LEN) continue;
+    out.push({ node, text, kind: 'heading' });
+  }
+  return out;
 }
 
 // 콜아웃 판정: 콜아웃 셀렉터에 맞고 네비/헤더/푸터 밖.
@@ -165,7 +206,11 @@ export function extractParagraphs(): ExtractResult {
     const root =
       document.querySelector<HTMLElement>('main, article') ?? document.body;
     const blocks = [
-      ...collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT),
+      // 제목(h1~h4)은 collectHeadings가 문서 전체에서 담당하므로 여기선 뺀다(중복 방지).
+      ...collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT).filter(
+        (b) => !b.node.matches(HEADING_SELECTOR),
+      ),
+      ...collectHeadings(),
       ...collectCode(root),
     ].sort(inDomOrder);
     const paragraphs = blocks.map((b, i) => tag(b, i));
@@ -195,10 +240,14 @@ export function extractParagraphs(): ExtractResult {
   //    코드 블록은 번역하지 않되 "코드 해설" 대상으로 함께 넣고, DOM 순서로 정렬한다.
   const accepted: Block[] = [];
   for (const b of collectBlocks(root, WALK_SELECTOR, EXCLUDE_NONCONTENT)) {
+    // h1~h4는 collectHeadings가 문서 전체에서 담당한다(루트 밖 제목도 잡기 위해) → 여기선 건너뛴다.
+    if (b.node.matches(HEADING_SELECTOR)) continue;
+    // isHeading은 이제 h5/h6에만 걸린다 — 기존처럼 S 검사 없이 채택한다.
     if (proseSet.has(b.text) || isCallout(b.node) || isHeading(b.node)) {
       accepted.push(b);
     }
   }
+  for (const b of collectHeadings()) accepted.push(b);
   for (const b of collectCode(root)) accepted.push(b);
   accepted.sort(inDomOrder);
   const paragraphs = accepted.map((b, idx) => tag(b, idx));
