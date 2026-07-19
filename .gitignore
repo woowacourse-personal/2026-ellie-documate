@@ -16,6 +16,10 @@ build/
 .env.*
 !.env.example
 
+# 확장 서명 키 (확장 ID 고정용) — 절대 커밋 금지, 안전하게 별도 백업
+*.pem
+.documate-pubkey.b64
+
 # 로그
 *.log
 npm-debug.log*

@@ -8,7 +8,13 @@ import { defineManifest } from '@crxjs/vite-plugin';
 export default defineManifest({
   manifest_version: 3,
   name: 'DocuMate',
-  version: '0.0.0',
+  version: '1.0.0',
+
+  // 확장 ID 고정용 공개키. 이게 있으면 개발용(압축해제 로드)·스토어 게시본이 모두
+  // 같은 결정적 ID(apanlhpbooomdieedglkojmghencbooc)를 갖는다. 덕분에 게시 전에
+  // 프록시 ALLOWED_ORIGINS를 이 ID로 미리 좁힐 수 있다(닭-달걀 해소).
+  // 대응 private key는 documate-key.pem (gitignore, 절대 커밋·유출 금지, 안전 백업).
+  key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2aZN//9YSGHnWHC1I7mN973UzVQbR+X+WDaLMm5jZr9tiUnWVdD+/9/UCTvK4vFJsprpm995u0s6jzKQD9NdcEDb+AeqKlSiVTFmPduObO7wSrkIEGH509QK6Oc/e3bjKA3Gf0z/Z8S2OTPMropo0QrO1AvKtNYmPCub6l30gk2adzA/5j4iAoKxrcp5zL5fBRKXzvq/unMRbPo/0F1UYD2SDTqFl9ke2EQUvFQJWFz4btdwn3lT8LvqXLk/DFsQDhk3JRq5JpWIaNEc6TDlxnSPncnIFkZaheP6/BPaHEU/RNNOzr4f/XbScEIJN12cqFxCAXps5B46h687PRhX7wIDAQAB',
   description:
     '개발 용어와 기술 문맥을 고려해 영어 개발 문서를 자연스럽게 번역하고, 어려운 개념은 해설과 후속 질문으로 이해할 수 있도록 돕는 Chrome 확장 프로그램',
 
