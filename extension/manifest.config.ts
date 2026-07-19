@@ -18,8 +18,24 @@ export default defineManifest({
   description:
     '개발 용어와 기술 문맥을 고려해 영어 개발 문서를 자연스럽게 번역하고, 어려운 개념은 해설과 후속 질문으로 이해할 수 있도록 돕는 Chrome 확장 프로그램',
 
+  // 아이콘: public/icons/ 의 PNG가 빌드 시 dist/icons/ 로 복사된다(Vite public).
+  // 툴바·확장 관리 화면·스토어에서 쓰인다. 원본 로고(문서 모양 D + M)에서 흰 배경을
+  // 투명 처리하고 여백을 크롭해 작은 사이즈에서도 마크가 또렷하게 보이도록 생성했다.
+  icons: {
+    16: 'icons/icon16.png',
+    32: 'icons/icon32.png',
+    48: 'icons/icon48.png',
+    128: 'icons/icon128.png',
+  },
+
   action: {
     default_title: 'DocuMate 켜기 / 끄기',
+    default_icon: {
+      16: 'icons/icon16.png',
+      32: 'icons/icon32.png',
+      48: 'icons/icon48.png',
+      128: 'icons/icon128.png',
+    },
   },
 
   background: {
