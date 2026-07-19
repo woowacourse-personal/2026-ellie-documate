@@ -10,11 +10,11 @@ export default defineManifest({
   name: 'DocuMate',
   version: '1.0.0',
 
-  // 확장 ID 고정용 공개키. 이게 있으면 개발용(압축해제 로드)·스토어 게시본이 모두
-  // 같은 결정적 ID(apanlhpbooomdieedglkojmghencbooc)를 갖는다. 덕분에 게시 전에
-  // 프록시 ALLOWED_ORIGINS를 이 ID로 미리 좁힐 수 있다(닭-달걀 해소).
-  // 대응 private key는 documate-key.pem (gitignore, 절대 커밋·유출 금지, 안전 백업).
-  key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2aZN//9YSGHnWHC1I7mN973UzVQbR+X+WDaLMm5jZr9tiUnWVdD+/9/UCTvK4vFJsprpm995u0s6jzKQD9NdcEDb+AeqKlSiVTFmPduObO7wSrkIEGH509QK6Oc/e3bjKA3Gf0z/Z8S2OTPMropo0QrO1AvKtNYmPCub6l30gk2adzA/5j4iAoKxrcp5zL5fBRKXzvq/unMRbPo/0F1UYD2SDTqFl9ke2EQUvFQJWFz4btdwn3lT8LvqXLk/DFsQDhk3JRq5JpWIaNEc6TDlxnSPncnIFkZaheP6/BPaHEU/RNNOzr4f/XbScEIJN12cqFxCAXps5B46h687PRhX7wIDAQAB',
+  // 확장 ID는 크롬 웹스토어가 게시 시 배정한다(매니페스트에 `key`를 넣으면 업로드가
+  // 거부됨 — "key 입력란은 매니페스트에 허용되지 않습니다"). 따라서 여기엔 key를 두지
+  // 않고, 게시 후 대시보드에서 배정된 ID를 확인해 프록시 ALLOWED_ORIGINS를 맞춘다.
+  // (로컬 개발 unpacked ID는 이와 다르므로, 프록시를 붙여 개발할 땐 localhost 프록시를
+  //  쓰거나 그 dev ID도 ALLOWED_ORIGINS에 추가한다.)
   description:
     '개발 용어와 기술 문맥을 고려해 영어 개발 문서를 자연스럽게 번역하고, 어려운 개념은 해설과 후속 질문으로 이해할 수 있도록 돕는 Chrome 확장 프로그램',
 
