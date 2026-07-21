@@ -16,7 +16,10 @@ function ensureHost(p: Paragraph): ShadowRoot {
     host = document.createElement('documate-tr');
     host.setAttribute(UI_MARKER, '');
     host.setAttribute(FOR_ATTR, p.id);
-    p.node.insertAdjacentElement('afterend', host);
+    // 함정 ②: 표 셀은 셀 '안쪽'(마지막 자식)에 붙인다. td 뒤(=tr의 자식)에 붙이면
+    // 렌더 시 익명 셀로 감싸져 열이 하나 더 생긴다.
+    if (p.kind === 'cell') p.node.append(host);
+    else p.node.insertAdjacentElement('afterend', host);
   }
   // 테마는 OS가 아니라 문단이 얹힌 실제 배경 밝기로 정한다(매 렌더마다 재감지 → SPA 테마 토글 대응).
   applyTheme(host, p.node);

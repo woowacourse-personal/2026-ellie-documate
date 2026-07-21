@@ -31,7 +31,11 @@ export function mountExplain(p: Paragraph, ctx: ExplainContext): void {
   const host = document.createElement('documate-ex');
   host.setAttribute(UI_MARKER, '');
   host.setAttribute(FOR_ATTR, p.id);
-  (trBlock ?? p.node).insertAdjacentElement('afterend', host);
+  // 번역 블록이 있으면 그 뒤(표 셀이면 번역 블록도 셀 안이라 여기서 함께 셀 안에 남는다).
+  // 없을 때만 앵커가 문단/셀 자신이 되는데, 셀은 뒤가 아니라 '안쪽'에 붙여야 열이 안 생긴다.
+  if (trBlock) trBlock.insertAdjacentElement('afterend', host);
+  else if (p.kind === 'cell') p.node.append(host);
+  else p.node.insertAdjacentElement('afterend', host);
 
   // 테마는 OS가 아니라 문단이 얹힌 실제 배경 밝기로 정한다.
   applyTheme(host, p.node);

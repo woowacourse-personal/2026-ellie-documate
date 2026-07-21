@@ -16,7 +16,7 @@ import { indexByText, normalize } from './mapper';
 //   - 콜아웃은 이 순회에서 자연히 포함된다(내부에 <p>가 없는 android식 aside는 leaf로 잡히고,
 //     <p>를 가진 MDN식 notecard는 그 <p>가 S에 있어 잡힌다) → 별도 수집·정렬 경로 불필요.
 
-export type ParagraphKind = 'text' | 'heading' | 'list-item' | 'quote' | 'code';
+export type ParagraphKind = 'text' | 'heading' | 'list-item' | 'quote' | 'code' | 'cell';
 
 export interface Paragraph {
   id: string; // 안정적 식별자 (원본 노드에 data-documate-id로도 심는다)
@@ -161,6 +161,34 @@ function collectCode(root: ParentNode): Block[] {
   return out;
 }
 
+// 표 셀(td/th) 수집. 표는 메인 순회에서 제외(EXCLUDE_*의 table)라 여기서 따로 모은다
+// (collectCode가 <pre>를 따로 모으는 것과 같은 패턴 → 메인 walk의 표 제외는 그대로 유지).
+// 함정 ①: 셀이 통째로 코드/식별자면(pre/code/kbd/samp/[translate="no"]) 산문이 없으므로 제외.
+// 주입은 셀 '안쪽'에 해야 한다(함정 ②) → kind:'cell'로 표시(translation/explain이 분기).
+const CELL_SELECTOR = 'td, th';
+function collectCells(root: ParentNode): Block[] {
+  const out: Block[] = [];
+  for (const node of root.querySelectorAll<HTMLElement>(CELL_SELECTOR)) {
+    if (node.closest(EXCLUDE_CHROME)) continue; // 네비/푸터 안 표 제외
+    if (node.closest(OUR_UI)) continue;
+    if (node.querySelector(CELL_SELECTOR)) continue; // 중첩 표 → 안쪽(leaf) 셀만
+    if (proseOf(node).length < MIN_TEXT_LEN) continue; // 함정 ①: 산문이 남는 셀만
+    const text = blockText(node);
+    if (text.length < MIN_TEXT_LEN) continue;
+    out.push({ node, text, kind: 'cell' });
+  }
+  return out;
+}
+
+// 코드/식별자 표시를 걷어낸 뒤 남는 산문 텍스트(함정 ① 판정용).
+function proseOf(node: HTMLElement): string {
+  const clone = node.cloneNode(true) as HTMLElement;
+  for (const el of clone.querySelectorAll('pre, code, kbd, samp, [translate="no"]')) {
+    el.remove();
+  }
+  return normalize(clone.textContent ?? '');
+}
+
 // 텍스트를 <p>가 아니라 <div>에 직접 담는 페이지(랜딩·카드형)를 위한 수집.
 //   developer.android.com 랜딩: <div class="devsite-landing-row-item-description-content">설명</div>
 // 이런 설명은 BLOCK_SELECTOR에 안 걸려 통째로 누락됐다(compose 랜딩: 설명 26개 전부 누락).
@@ -295,6 +323,7 @@ export function extractParagraphs(): ExtractResult {
       ),
       ...collectHeadings(),
       ...collectCode(root),
+      ...collectCells(root),
     ].sort(inDomOrder);
     const paragraphs = blocks.map((b, i) => tag(b, i));
     return { title: document.title, paragraphs, unmappedCount: 0, readabilityOk: false };
@@ -335,6 +364,7 @@ export function extractParagraphs(): ExtractResult {
   const takenText = new Set(accepted.map((b) => b.text));
   for (const b of collectTextDivs(root, proseSet, takenText)) accepted.push(b);
   for (const b of collectCode(root)) accepted.push(b);
+  for (const b of collectCells(root)) accepted.push(b); // 표 셀(함정 ①로 코드셀 제외됨)
   accepted.sort(inDomOrder);
   const paragraphs = accepted.map((b, idx) => tag(b, idx));
 
