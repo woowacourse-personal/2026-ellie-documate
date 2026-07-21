@@ -44,9 +44,16 @@ function render(
     }
     .loading { color: #9aa0a6; }
     .error { color: #d93025; border-left-color: #d93025; background: rgba(217,48,37,0.06); }
+    /* 원문의 인라인 코드를 번역문에서도 코드 칩으로 되살린다(고정폭·옅은 배경). */
+    .ci {
+      font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em; background: rgba(0,0,0,0.06);
+      padding: 1px 5px; border-radius: 4px; word-break: break-all;
+    }
     /* 다크 테마: OS가 아니라 감지된 배경 기준(:host의 data-theme). */
     :host([data-theme="dark"]) .tr { color: #e9eaed; background: rgba(138,180,248,0.16); }
     :host([data-theme="dark"]) .error { color: #f28b82; }
+    :host([data-theme="dark"]) .ci { background: rgba(255,255,255,0.12); }
   `;
 
   const box = document.createElement('div');
@@ -61,8 +68,50 @@ function render(
   box.style.fontWeight = cs.fontWeight;
   box.style.fontFamily = cs.fontFamily;
 
-  box.textContent = text; // 항상 textContent
+  // 번역 완료 상태에서, 원문의 인라인 코드 조각을 코드 칩으로 되살린다. 그 외엔 평문.
+  if (state === 'done' && p.codeSpans.length > 0) {
+    renderWithCodeSpans(box, text, p.codeSpans);
+  } else {
+    box.textContent = text; // 항상 textContent
+  }
   root.append(style, box);
+}
+
+// text 안에서 codeSpans에 해당하는 조각을 <code> 칩으로 감싸고 나머지는 텍스트 노드로 넣는다.
+// 전부 textContent/createTextNode만 쓴다(innerHTML 금지 — LLM·페이지 텍스트는 신뢰 불가).
+function renderWithCodeSpans(box: HTMLElement, text: string, spans: string[]): void {
+  // 긴 조각부터 처리해 부분 문자열 겹침을 막는다. 2자 미만·중복 제거.
+  const uniq = [...new Set(spans.filter((s) => s.length >= 2))].sort((a, b) => b.length - a.length);
+  let parts: { code: boolean; s: string }[] = [{ code: false, s: text }];
+  for (const span of uniq) {
+    const next: { code: boolean; s: string }[] = [];
+    for (const part of parts) {
+      if (part.code) {
+        next.push(part);
+        continue;
+      }
+      let rest = part.s;
+      let idx = rest.indexOf(span);
+      while (idx !== -1) {
+        if (idx > 0) next.push({ code: false, s: rest.slice(0, idx) });
+        next.push({ code: true, s: span });
+        rest = rest.slice(idx + span.length);
+        idx = rest.indexOf(span);
+      }
+      if (rest) next.push({ code: false, s: rest });
+    }
+    parts = next;
+  }
+  for (const part of parts) {
+    if (part.code) {
+      const c = document.createElement('code');
+      c.className = 'ci';
+      c.textContent = part.s;
+      box.appendChild(c);
+    } else {
+      box.appendChild(document.createTextNode(part.s));
+    }
+  }
 }
 
 export function showTranslationLoading(p: Paragraph): void {

@@ -23,6 +23,7 @@ export interface Paragraph {
   node: HTMLElement; // 원본 DOM 노드 (인라인 주입 대상)
   text: string; // 정규화된 문단 텍스트
   kind: ParagraphKind;
+  codeSpans: string[]; // 문단 속 인라인 코드(<code> 등) 조각. 번역 렌더 때 코드 칩으로 되살린다.
 }
 
 export interface ExtractResult {
@@ -354,7 +355,21 @@ export function extractParagraphs(): ExtractResult {
 function tag(block: Block, index: number): Paragraph {
   const id = `dm-${index}`;
   block.node.dataset.documateId = id;
-  return { id, node: block.node, text: block.text, kind: block.kind };
+  return { id, node: block.node, text: block.text, kind: block.kind, codeSpans: codeSpansOf(block.node) };
+}
+
+// 문단 속 인라인 코드(<code>·<kbd>·<samp>) 조각의 텍스트를 모은다.
+// 번역문은 코드·식별자를 원문 그대로 두므로(temperature:0 + 프롬프트), 이 조각들이 번역문
+// 안에 substring으로 그대로 나타난다 → 렌더 때 찾아 코드 칩으로 되살린다(translation.ts).
+// blockText와 같은 normalize를 써야 번역문 안에서 매칭된다. <pre> 블록 코드는 제외(인라인만).
+function codeSpansOf(node: HTMLElement): string[] {
+  const out = new Set<string>();
+  for (const el of node.querySelectorAll('code, kbd, samp')) {
+    if (el.closest('pre')) continue;
+    const t = normalize(el.textContent ?? '');
+    if (t.length >= 2) out.add(t);
+  }
+  return [...out];
 }
 
 // Readability는 원본을 변형하므로 반드시 복제본에 돌린다(원본 비파괴).
