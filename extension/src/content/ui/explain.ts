@@ -2,6 +2,7 @@ import type { Paragraph } from '../extract';
 import type { ExplainRequest } from '../../shared/messages';
 import { CONVERSATION_CSS, createConversation } from './conversation';
 import { applyTheme } from './theme';
+import { insertBlock } from './inject';
 
 // 문단별 개념 해설(F2) + 후속질문(F3).
 // "해설 보기" 버튼(기본 접힘) → 클릭 시 스트리밍으로 해설을 펼치고,
@@ -31,11 +32,10 @@ export function mountExplain(p: Paragraph, ctx: ExplainContext): void {
   const host = document.createElement('documate-ex');
   host.setAttribute(UI_MARKER, '');
   host.setAttribute(FOR_ATTR, p.id);
-  // 번역 블록이 있으면 그 뒤(표 셀이면 번역 블록도 셀 안이라 여기서 함께 셀 안에 남는다).
-  // 없을 때만 앵커가 문단/셀 자신이 되는데, 셀은 뒤가 아니라 '안쪽'에 붙여야 열이 안 생긴다.
+  // 번역 블록이 있으면 그 뒤에 붙인다(번역 블록이 이미 안전한 위치에 있으므로 그 형제도 안전).
+  // 없으면 문단 노드 기준으로 레이아웃-안전하게 삽입(표 셀·flex/grid는 안쪽).
   if (trBlock) trBlock.insertAdjacentElement('afterend', host);
-  else if (p.kind === 'cell') p.node.append(host);
-  else p.node.insertAdjacentElement('afterend', host);
+  else insertBlock(p.node, host);
 
   // 테마는 OS가 아니라 문단이 얹힌 실제 배경 밝기로 정한다.
   applyTheme(host, p.node);

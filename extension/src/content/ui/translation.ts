@@ -1,5 +1,6 @@
 import type { Paragraph } from '../extract';
 import { applyTheme } from './theme';
+import { insertBlock } from './inject';
 
 // 원본 문단 바로 아래에 한국어 번역 블록을 인라인 주입한다.
 // 각 블록은 자체 Shadow DOM 안에 렌더 → 페이지 CSS와 상호 비파괴.
@@ -16,10 +17,8 @@ function ensureHost(p: Paragraph): ShadowRoot {
     host = document.createElement('documate-tr');
     host.setAttribute(UI_MARKER, '');
     host.setAttribute(FOR_ATTR, p.id);
-    // 함정 ②: 표 셀은 셀 '안쪽'(마지막 자식)에 붙인다. td 뒤(=tr의 자식)에 붙이면
-    // 렌더 시 익명 셀로 감싸져 열이 하나 더 생긴다.
-    if (p.kind === 'cell') p.node.append(host);
-    else p.node.insertAdjacentElement('afterend', host);
+    // 표 셀·flex/grid 컨테이너면 노드 안쪽에, 그 외엔 원문 뒤에 삽입(레이아웃 보호).
+    insertBlock(p.node, host);
   }
   // 테마는 OS가 아니라 문단이 얹힌 실제 배경 밝기로 정한다(매 렌더마다 재감지 → SPA 테마 토글 대응).
   applyTheme(host, p.node);
