@@ -26,13 +26,6 @@ export interface Translator {
 
 const DEBOUNCE_MS = 150;
 
-// 개념 해설("해설 보기") 버튼은 문장에만 붙인다. 단어·짧은 라벨·제목엔 붙이지 않는다.
-// (번역은 그대로 하되 해설 버튼만 제한) — 제목(heading)은 제외 + 단어 수로 문장 여부를 가늠한다.
-const MIN_WORDS_FOR_EXPLAIN = 4;
-function looksLikeSentence(text: string): boolean {
-  return text.trim().split(/\s+/).length >= MIN_WORDS_FOR_EXPLAIN;
-}
-
 // 단발 번역(F4 드래그 폴백용). 문단 파이프라인과 달리 배치·디바운스 없이 1건만 보낸다.
 // SW를 거치므로 로컬 캐시·프록시 경로는 문단 번역과 똑같이 탄다.
 export async function translateOnce(text: string): Promise<string> {
@@ -103,13 +96,12 @@ export function createTranslator(
         } else {
           ok++;
           showTranslation(p, r.translation);
-          // 번역 아래 "해설 보기" 버튼(F2) — 문장에만 붙인다(단어·짧은 라벨·제목 제외).
-          if (p.kind !== 'heading' && looksLikeSentence(p.text)) {
-            mountExplain(p, {
-              docTitle: doc.title,
-              precedingText: doc.precedingOf(p.id),
-            });
-          }
+          // 번역이 뜬 모든 문단에 "해설 보기" 버튼(F2)을 붙인다(제목·짧은 라벨 포함).
+          // (코드 블록은 index.ts에서 코드 해설로 따로 처리되므로 여기 오지 않는다.)
+          mountExplain(p, {
+            docTitle: doc.title,
+            precedingText: doc.precedingOf(p.id),
+          });
         }
       }
       const renderMs = Math.round(performance.now() - tRender);

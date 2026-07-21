@@ -8,7 +8,7 @@ import { defineManifest } from '@crxjs/vite-plugin';
 export default defineManifest({
   manifest_version: 3,
   name: 'DocuMate',
-  version: '1.0.0',
+  version: '1.0.1',
 
   // 확장 ID는 크롬 웹스토어가 게시 시 배정한다(매니페스트에 `key`를 넣으면 업로드가
   // 거부됨 — "key 입력란은 매니페스트에 허용되지 않습니다"). 따라서 여기엔 key를 두지
@@ -16,7 +16,7 @@ export default defineManifest({
   // (로컬 개발 unpacked ID는 이와 다르므로, 프록시를 붙여 개발할 땐 localhost 프록시를
   //  쓰거나 그 dev ID도 ALLOWED_ORIGINS에 추가한다.)
   description:
-    '개발 용어와 기술 문맥을 고려해 영어 개발 문서를 자연스럽게 번역하고, 어려운 개념은 해설과 후속 질문으로 이해할 수 있도록 돕는 Chrome 확장 프로그램',
+    '영어 개발 문서와 기술 아티클을 개발 용어와 기술적인 맥락에 맞게 번역하고 해설하는 Chrome 확장 프로그램입니다.',
 
   // 아이콘: public/icons/ 의 PNG가 빌드 시 dist/icons/ 로 복사된다(Vite public).
   // 툴바·확장 관리 화면·스토어에서 쓰인다. 원본 로고(문서 모양 D + M)에서 흰 배경을
