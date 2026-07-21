@@ -172,7 +172,10 @@ function collectCells(root: ParentNode): Block[] {
     if (node.closest(EXCLUDE_CHROME)) continue; // 네비/푸터 안 표 제외
     if (node.closest(OUR_UI)) continue;
     if (node.querySelector(CELL_SELECTOR)) continue; // 중첩 표 → 안쪽(leaf) 셀만
-    if (proseOf(node).length < MIN_TEXT_LEN) continue; // 함정 ①: 산문이 남는 셀만
+    // 함정 ①: 코드/식별자를 걷어낸 뒤 '실제 단어(글자)'가 남는 셀만 번역한다.
+    // 길이만 보면, 코드 칩만 콤마로 나열된 셀(예: `todo`, `clarify`, …)의 콤마·공백을
+    // 산문으로 착각해 도구 수에 따라 번역/미번역이 갈린다(실측: Hermes tools 표).
+    if (!/\p{L}{2,}/u.test(proseOf(node))) continue;
     const text = blockText(node);
     if (text.length < MIN_TEXT_LEN) continue;
     out.push({ node, text, kind: 'cell' });
