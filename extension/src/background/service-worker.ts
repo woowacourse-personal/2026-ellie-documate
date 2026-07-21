@@ -60,7 +60,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'documate-toggle',
-      title: 'DocuMate 켜기 / 끄기',
+      title: 'DocuMate 번역 켜기 / 끄기',
       contexts: ['page', 'selection'],
     });
   });
