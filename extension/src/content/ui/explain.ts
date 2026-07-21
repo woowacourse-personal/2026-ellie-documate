@@ -59,6 +59,15 @@ function styleEl(): HTMLStyleElement {
     }
     .panel.open { grid-template-rows: 1fr; }
     .panel > .inner { overflow: hidden; }
+    /* 본문의 코드 블록을 해설 안에서도 코드 블록으로 보여준다(고정폭·개행 보존).
+       코드는 관례상 다크 배경이 읽기 쉬워 라이트/다크 어느 페이지에서도 다크로 둔다. */
+    .code {
+      margin: 2px 0 8px; padding: 10px 12px;
+      background: #202124; color: #e8eaed;
+      border-radius: 6px; overflow-x: auto;
+      font: 12px/1.55 "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre; tab-size: 2;
+    }
     ${CONVERSATION_CSS}
   `;
   return style;
@@ -98,6 +107,15 @@ function expand(root: ShadowRoot, p: Paragraph, ctx: ExplainContext): void {
     kind: ctx.kind ?? 'concept',
     source: 'paragraph',
   } satisfies ExplainRequest;
+
+  // 코드 블록이면 그 코드를 코드 블록으로 먼저 보여준 뒤 해설을 붙인다.
+  // 페이지에서 추출한 코드 텍스트 → textContent로만(개행 보존, XSS 안전).
+  if (ctx.kind === 'code') {
+    const code = document.createElement('pre');
+    code.className = 'code';
+    code.textContent = p.text;
+    inner.append(code);
+  }
 
   const convo = createConversation(base, {
     onFirstDone: () => {
