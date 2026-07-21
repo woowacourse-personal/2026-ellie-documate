@@ -55,7 +55,8 @@ export default defineManifest({
   ],
 
   // storage: 번역 결과 로컬 캐시(같은 문단 재번역 방지).
-  permissions: ['activeTab', 'storage'],
+  // contextMenus: 우클릭 메뉴에도 켜기/끄기 진입점을 둔다(아이콘 클릭과 동일 동작).
+  permissions: ['activeTab', 'storage', 'contextMenus'],
 
   // 우리 프록시 호출 허용. 프로덕션 프록시 URL. 로컬에서 프록시를 고칠 땐
   // 'http://localhost:3000/*'를 잠깐 추가한다(PROXY_BASE_URL도 함께).

@@ -37,18 +37,39 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-chrome.action.onClicked.addListener((tab) => {
-  console.log('[Documate BG] 아이콘 클릭됨 · tab', tab.id, tab.url);
-  if (tab.id === undefined) return;
-
+// content에 토글 메시지를 보낸다. 아이콘 클릭·우클릭 메뉴가 공유한다.
+function sendToggle(tabId: number): void {
   const message: ToggleMessage = { type: 'DOCUMATE_TOGGLE' };
   chrome.tabs
-    .sendMessage(tab.id, message)
-    .then(() => console.log('[Documate BG] content로 메시지 전달 성공'))
+    .sendMessage(tabId, message)
+    .then(() => console.log('[Documate BG] content로 토글 메시지 전달 성공'))
     .catch((e) =>
       // content script가 없으면 여기로 온다(대개 확장 로드 전에 열려있던 페이지 → 새로고침 필요).
       console.warn('[Documate BG] content 없음 → 페이지 새로고침 필요?', e.message),
     );
+}
+
+chrome.action.onClicked.addListener((tab) => {
+  console.log('[Documate BG] 아이콘 클릭됨 · tab', tab.id, tab.url);
+  if (tab.id !== undefined) sendToggle(tab.id);
+});
+
+// 우클릭(컨텍스트) 메뉴 진입점. 아이콘 클릭과 동일하게 토글한다.
+// 메뉴는 설치/업데이트 시 한 번 만든다(removeAll로 중복 id 에러 방지, SW 재기동에도 유지됨).
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'documate-toggle',
+      title: 'DocuMate 켜기 / 끄기',
+      contexts: ['page', 'selection'],
+    });
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'documate-toggle' && tab?.id !== undefined) {
+    sendToggle(tab.id);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
