@@ -139,8 +139,14 @@ function collectHeadings(): Block[] {
 }
 
 // 콜아웃 판정: 콜아웃 셀렉터에 맞고 네비/헤더/푸터 밖.
+// 콜아웃(Note/Key Term 박스 등)이거나 그 '안'의 블록인가.
+// closest를 쓰는 이유: android `key-term`처럼 <aside> 안에 <p>가 든 콜아웃은, aside가
+// leaf가 아니라 aside 자신은 블록으로 안 잡히고 그 <p>가 대신 잡힌다. 그런데 Readability가
+// <aside>를 비본문으로 지워 그 <p>는 S에도 없다 → 콜아웃 정의 문단이 통째로 누락됐다
+// (실측: developer.android.com Composition/Recomposition Key Term). 콜아웃 안이면 채택한다.
+// 콘텐츠 루트 안만 순회하므로 페이지 바깥 사이드바 <aside>는 애초에 여기 오지 않는다.
 function isCallout(node: HTMLElement): boolean {
-  return node.matches(CALLOUT_SELECTOR) && !node.closest('nav, header, footer');
+  return !!node.closest(CALLOUT_SELECTOR) && !node.closest('nav, header, footer');
 }
 
 // 코드 블록(<pre>): 번역하지 않고 "코드 해설" 대상으로만 수집. 개행을 보존한다.
