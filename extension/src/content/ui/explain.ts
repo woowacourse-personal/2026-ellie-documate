@@ -1,6 +1,7 @@
 import type { Paragraph } from '../extract';
 import type { ExplainRequest } from '../../shared/messages';
 import { CONVERSATION_CSS, createConversation } from './conversation';
+import { applyTheme } from './theme';
 
 // 문단별 개념 해설(F2) + 후속질문(F3).
 // "해설 보기" 버튼(기본 접힘) → 클릭 시 스트리밍으로 해설을 펼치고,
@@ -32,6 +33,9 @@ export function mountExplain(p: Paragraph, ctx: ExplainContext): void {
   host.setAttribute(FOR_ATTR, p.id);
   (trBlock ?? p.node).insertAdjacentElement('afterend', host);
 
+  // 테마는 OS가 아니라 문단이 얹힌 실제 배경 밝기로 정한다.
+  applyTheme(host, p.node);
+
   const root = host.attachShadow({ mode: 'open' });
   root.append(styleEl(), collapsed(root, p, ctx));
 }
@@ -48,6 +52,7 @@ function styleEl(): HTMLStyleElement {
       cursor: pointer;
     }
     .toggle:hover { background: rgba(138,180,248,0.12); }
+    :host([data-theme="dark"]) .toggle { color: #8ab4f8; }
     .panel {
       display: grid; grid-template-rows: 0fr;
       transition: grid-template-rows 220ms cubic-bezier(0.4,0,0.2,1);

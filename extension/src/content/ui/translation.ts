@@ -1,4 +1,5 @@
 import type { Paragraph } from '../extract';
+import { applyTheme } from './theme';
 
 // 원본 문단 바로 아래에 한국어 번역 블록을 인라인 주입한다.
 // 각 블록은 자체 Shadow DOM 안에 렌더 → 페이지 CSS와 상호 비파괴.
@@ -17,6 +18,8 @@ function ensureHost(p: Paragraph): ShadowRoot {
     host.setAttribute(FOR_ATTR, p.id);
     p.node.insertAdjacentElement('afterend', host);
   }
+  // 테마는 OS가 아니라 문단이 얹힌 실제 배경 밝기로 정한다(매 렌더마다 재감지 → SPA 테마 토글 대응).
+  applyTheme(host, p.node);
   return host.shadowRoot ?? host.attachShadow({ mode: 'open' });
 }
 
@@ -35,15 +38,15 @@ function render(
       margin: 4px 0 10px;
       padding: 6px 10px;
       border-left: 3px solid #8ab4f8;
-      background: rgba(138, 180, 248, 0.08);
+      background: rgba(138, 180, 248, 0.10);
       border-radius: 0 6px 6px 0;
       color: #202124;
     }
     .loading { color: #9aa0a6; }
     .error { color: #d93025; border-left-color: #d93025; background: rgba(217,48,37,0.06); }
-    @media (prefers-color-scheme: dark) {
-      .tr { color: #e6e6e6; }
-    }
+    /* 다크 테마: OS가 아니라 감지된 배경 기준(:host의 data-theme). */
+    :host([data-theme="dark"]) .tr { color: #e9eaed; background: rgba(138,180,248,0.16); }
+    :host([data-theme="dark"]) .error { color: #f28b82; }
   `;
 
   const box = document.createElement('div');

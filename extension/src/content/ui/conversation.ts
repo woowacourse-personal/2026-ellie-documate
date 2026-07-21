@@ -21,7 +21,7 @@ export const CONVERSATION_CSS = `
   .body {
     margin: 2px 0 10px; padding: 10px 12px;
     border-left: 3px solid #34a853;
-    background: rgba(52,168,83,0.07); border-radius: 0 6px 6px 0;
+    background: rgba(52,168,83,0.09); border-radius: 0 6px 6px 0;
     font: 14px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: #202124; white-space: pre-wrap;
   }
@@ -30,7 +30,7 @@ export const CONVERSATION_CSS = `
   .q {
     margin: 2px 0 6px; padding: 8px 12px;
     border-left: 3px solid #9aa0a6;
-    background: rgba(154,160,166,0.12); border-radius: 0 6px 6px 0;
+    background: rgba(154,160,166,0.14); border-radius: 0 6px 6px 0;
     font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: #3c4043; white-space: pre-wrap;
   }
@@ -51,11 +51,12 @@ export const CONVERSATION_CSS = `
   }
   .ask-send:hover:not(:disabled) { background: rgba(138,180,248,0.12); }
   .ask-input:disabled, .ask-send:disabled { opacity: 0.5; cursor: default; }
-  @media (prefers-color-scheme: dark) {
-    .body { color: #e6e6e6; }
-    .q { color: #c8c8c8; }
-    .ask-input { background: #202124; color: #e6e6e6; border-color: #5f6368; }
-  }
+  /* 다크 테마: OS가 아니라 감지된 배경 기준(:host의 data-theme). */
+  :host([data-theme="dark"]) .body { color: #e9eaed; background: rgba(52,168,83,0.16); }
+  :host([data-theme="dark"]) .error { color: #f28b82; }
+  :host([data-theme="dark"]) .q { color: #c8c8c8; background: rgba(154,160,166,0.20); }
+  :host([data-theme="dark"]) .ask-input { background: #202124; color: #e9eaed; border-color: #5f6368; }
+  :host([data-theme="dark"]) .ask-send { color: #8ab4f8; }
 `;
 
 export interface Conversation {

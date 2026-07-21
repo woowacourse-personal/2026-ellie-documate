@@ -1,6 +1,7 @@
 import type { ExplainRequest } from '../../shared/messages';
 import { translateOnce } from '../translate';
 import { CONVERSATION_CSS, createConversation } from './conversation';
+import { applyTheme } from './theme';
 
 // 드래그 선택 팝업(F4 폴백). 번역 → 해설 → 후속질문 3단.
 //
@@ -46,6 +47,9 @@ export function showDragPopup(opts: DragPopupOptions): DragPopup {
       if (current === popup) current = undefined;
     },
   };
+
+  // 팝업은 불투명 카드지만, 페이지가 다크면 다크 카드로 맞춘다(감지 기준: 페이지 배경).
+  applyTheme(host, document.body);
 
   const root = host.attachShadow({ mode: 'open' });
   root.append(styleEl(), shell(opts, popup.remove));
@@ -125,12 +129,12 @@ function styleEl(): HTMLStyleElement {
     }
     .toggle:hover { background: rgba(138,180,248,0.12); }
     ${CONVERSATION_CSS}
-    @media (prefers-color-scheme: dark) {
-      .pop { background: #292a2d; border-color: #5f6368; color: #e6e6e6; }
-      .src { color: #9aa0a6; background: rgba(255,255,255,0.05); border-left-color: #5f6368; }
-      .tr { color: #e6e6e6; }
-      .close:hover { color: #e6e6e6; }
-    }
+    /* 다크 테마: OS가 아니라 감지된 페이지 배경 기준(:host의 data-theme). */
+    :host([data-theme="dark"]) .pop { background: #292a2d; border-color: #5f6368; color: #e9eaed; }
+    :host([data-theme="dark"]) .src { color: #9aa0a6; background: rgba(255,255,255,0.05); border-left-color: #5f6368; }
+    :host([data-theme="dark"]) .tr { color: #e9eaed; }
+    :host([data-theme="dark"]) .toggle { color: #8ab4f8; }
+    :host([data-theme="dark"]) .close:hover { color: #e9eaed; }
   `;
   return style;
 }
