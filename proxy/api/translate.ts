@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Type } from '@google/genai';
 import { genai, TRANSLATE_MODEL } from '../lib/gemini.js';
 import { translationSystem } from '../lib/prompts.js';
-import { guard, validateTexts } from '../lib/security.js';
+import { guard, validateTexts, LIMITS } from '../lib/security.js';
 import { cacheEnabled, cacheGetMany, cacheSetMany } from '../lib/cache.js';
 import { checkRateLimit } from '../lib/ratelimit.js';
 
@@ -19,9 +19,9 @@ import { checkRateLimit } from '../lib/ratelimit.js';
 // 않는다. (실측 장애: 3.5-flash-lite가 thinkingBudget:0을 거부 → 이 폴백이면 자동 복구됐다.)
 // 주의: 이건 '설정 거부' 같은 하드 에러만 막는다. 모델이 조용히 나쁘게 번역하는 품질 드리프트는
 // 못 막으므로 모니터링이 별도로 필요하다.
-async function generateTranslations(texts: string[]): Promise<string> {
+async function generateTranslations(texts: string[], context?: string): Promise<string> {
   const contents = JSON.stringify(texts);
-  const systemInstruction = translationSystem();
+  const systemInstruction = translationSystem(context);
   try {
     const r = await genai.models.generateContent({
       model: TRANSLATE_MODEL,
@@ -72,11 +72,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 드래그 선택은 공용 캐시에 **저장하지 않는다**(사내 문서일 수 있다). 조회는 해도 된다.
   const store = req.body?.source !== 'drag';
 
+  // 드래그 단어의 문맥. 있으면 문맥 의존 번역이므로 캐시(텍스트 단독 키)를 우회한다
+  // — 같은 단어라도 문맥에 따라 뜻이 달라지므로 문맥 없는 캐시 값을 쓰면 안 된다.
+  const rawContext = typeof req.body?.context === 'string' ? req.body.context : undefined;
+  const context = rawContext?.slice(0, LIMITS.MAX_CONTEXT_CHARS);
+  const useCache = !context;
+
   const all = texts as string[];
 
   try {
-    // 1) 공용 캐시 조회(MGET 1회). 적중분은 Gemini를 아예 안 부른다.
-    const cached = await cacheGetMany(all);
+    // 1) 공용 캐시 조회(MGET 1회). 적중분은 Gemini를 아예 안 부른다. (문맥 번역은 우회)
+    const cached = useCache
+      ? await cacheGetMany(all)
+      : (new Array(all.length).fill(undefined) as (string | undefined)[]);
     const missIdx: number[] = [];
     for (let i = 0; i < all.length; i++) {
       if (cached[i] === undefined) missIdx.push(i);
@@ -95,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2) 미적중만 번역한다. 문단마다 1요청 대신 배치 전체를 1요청으로 묶는다.
     const missTexts = missIdx.map((i) => all[i]);
     const g0 = Date.now();
-    const rawText = await generateTranslations(missTexts);
+    const rawText = await generateTranslations(missTexts, context);
     const geminiMs = Date.now() - g0;
     const fresh = JSON.parse(rawText);
     if (!Array.isArray(fresh) || fresh.length !== missTexts.length) {

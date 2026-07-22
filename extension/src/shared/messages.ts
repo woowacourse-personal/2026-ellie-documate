@@ -18,6 +18,8 @@ export interface TranslateRequest {
   // 동작하므로 사내 위키·비공개 문서의 문장일 수 있고, 그게 우리 서버에 쌓이면 안 된다.
   // (로컬 캐시는 사용자 자기 브라우저라 무관하다. 공용 캐시 조회는 해도 된다 — 저장만 막는다.)
   source?: 'drag' | 'paragraph';
+  // 드래그 단어의 문맥(선택을 감싼 문장/문단). 있으면 프록시가 문맥 의존 번역 + 캐시 우회.
+  context?: string;
 }
 
 // service worker → content: 번역 결과 (id로 매칭)

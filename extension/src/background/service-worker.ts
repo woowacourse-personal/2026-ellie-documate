@@ -74,7 +74,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (isMessage(message) && message.type === 'DOCUMATE_TRANSLATE') {
-    handleTranslate(message.items, message.source ?? 'paragraph')
+    handleTranslate(message.items, message.source ?? 'paragraph', message.context)
       .then(sendResponse)
       .catch((e) => {
         const reason = e instanceof Error ? e.message : String(e);
@@ -97,14 +97,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 async function handleTranslate(
   items: TranslateItem[],
   source: 'drag' | 'paragraph',
+  context?: string,
 ): Promise<TranslateResponse> {
   const results: TranslateResponse['results'] = [];
   const uncached: TranslateItem[] = [];
 
-  // 1) 캐시 확인
+  // 1) 캐시 확인. 단 문맥 의존 번역(드래그+문맥)은 캐시(텍스트 단독 키)를 우회한다
+  //    — 같은 단어라도 문맥에 따라 뜻이 달라져 문맥 없는 캐시 값을 쓰면 안 된다.
   const tCache = Date.now();
   for (const it of items) {
-    const hit = await cacheGet(it.text);
+    const hit = context ? undefined : await cacheGet(it.text);
     if (hit !== undefined) results.push({ id: it.id, translation: hit });
     else uncached.push(it);
   }
@@ -121,6 +123,7 @@ async function handleTranslate(
     const { outcomes, geminiMs: gm } = await translateViaProxy(
       uncached.map((i) => i.text),
       source,
+      context,
     );
     proxyMs = Date.now() - t0;
     geminiMs = gm;
@@ -141,7 +144,7 @@ async function handleTranslate(
         });
       }
     });
-    await cacheSetMany(toCache);
+    if (!context) await cacheSetMany(toCache); // 문맥 의존 번역은 로컬 캐시에도 저장 안 함
     console.log(
       `[Documate BG] 신규 ${uncached.length}개 처리 · 프록시왕복 ${proxyMs}ms (Gemini ${geminiMs}ms + 오버헤드 ${proxyMs - geminiMs}ms) · 실패 ${failed}`,
     );

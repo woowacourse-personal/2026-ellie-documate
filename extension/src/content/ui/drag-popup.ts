@@ -174,7 +174,7 @@ function shell(opts: DragPopupOptions, close: () => void): HTMLElement {
 
   pop.append(head, src, tr, toggle, convoBox);
 
-  translateOnce(opts.text)
+  translateOnce(opts.text, opts.precedingText)
     .then((translation) => {
       tr.classList.remove('loading');
       tr.textContent = translation; // LLM 출력 → textContent로만
