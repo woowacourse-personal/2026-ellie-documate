@@ -12,6 +12,55 @@ import { checkRateLimit } from '../lib/ratelimit.js';
 //
 // 공용 캐시(사용자 간 공유)를 앞에 둔다: 키가 하나뿐이라 하루 쿼터가 전 사용자의 공유
 // 자원이므로, 캐시가 없으면 같은 문서를 보는 사람 수만큼 쿼터가 마른다. lib/cache.ts 참고.
+// 번역 생성. **모델 업그레이드 내성**의 핵심:
+// 최적 설정(thinkingConfig·responseSchema)으로 먼저 시도하고, 모델이 그 설정을 거부하면
+// (400 INVALID_ARGUMENT — gemini-flash-lite-**latest**가 조용히 바뀌며 파라미터 제약이
+// 달라지는 경우) 최소 설정으로 자동 재시도한다. 그래야 모델이 바뀌어도 번역이 통째로 죽지
+// 않는다. (실측 장애: 3.5-flash-lite가 thinkingBudget:0을 거부 → 이 폴백이면 자동 복구됐다.)
+// 주의: 이건 '설정 거부' 같은 하드 에러만 막는다. 모델이 조용히 나쁘게 번역하는 품질 드리프트는
+// 못 막으므로 모니터링이 별도로 필요하다.
+async function generateTranslations(texts: string[]): Promise<string> {
+  const contents = JSON.stringify(texts);
+  const systemInstruction = translationSystem();
+  try {
+    const r = await genai.models.generateContent({
+      model: TRANSLATE_MODEL,
+      contents,
+      config: {
+        systemInstruction,
+        // 번역은 창작이 아니다 → temperature:0 (같은 문장 동일 결과 + "식별자 원문 유지" 준수).
+        temperature: 0,
+        // 번역엔 사고 거의 불필요 → 최소값. (0은 3.5-flash-lite에서 거부됨.)
+        thinkingConfig: { thinkingBudget: 512 },
+        responseMimeType: 'application/json',
+        responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
+      },
+    });
+    return r.text ?? '[]';
+  } catch (err) {
+    if (!isConfigRejected(err)) throw err; // 429·503·네트워크 등 진짜 상류 에러는 그대로 올린다
+    console.warn('[translate] 모델이 최적 설정 거부 → 최소 설정 폴백(모델 업그레이드 추정)', err);
+    const r = await genai.models.generateContent({
+      model: TRANSLATE_MODEL,
+      contents,
+      config: {
+        systemInstruction,
+        temperature: 0,
+        // thinkingConfig·responseSchema는 뺀다(가장 잘 거부되는 신설 파라미터).
+        // JSON 출력은 프롬프트가 이미 요구하므로 mimeType만 유지해 파싱 안정성을 지킨다.
+        responseMimeType: 'application/json',
+      },
+    });
+    return r.text ?? '[]';
+  }
+}
+
+// 설정 파라미터 거부(400 INVALID_ARGUMENT)인가. 모델 업그레이드로 제약이 바뀌면 난다.
+function isConfigRejected(err: unknown): boolean {
+  const e = err as { status?: number; message?: string };
+  return e?.status === 400 || /invalid[_\s-]?argument/i.test(e?.message ?? '');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guard(req, res)) return; // CORS·메서드·Origin 검증
   if (!(await checkRateLimit(req, res))) return; // IP 레이트리밋 (429)
@@ -46,26 +95,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2) 미적중만 번역한다. 문단마다 1요청 대신 배치 전체를 1요청으로 묶는다.
     const missTexts = missIdx.map((i) => all[i]);
     const g0 = Date.now();
-    const response = await genai.models.generateContent({
-      model: TRANSLATE_MODEL,
-      contents: JSON.stringify(missTexts),
-      config: {
-        systemInstruction: translationSystem(),
-        // 번역은 창작이 아니다. 기본값(1.0)이면 같은 문장이 매번 다르게 나오고
-        // (실측: 5번 요청 → 5가지 결과) 식별자까지 번역돼 "API 이름은 원문 유지" 규칙이
-        // 깨진다(Modifier → 수식어/수정자). 0이면 5번 모두 동일 + 규칙 준수.
-        // 청크가 병렬로 나가므로 페이지 안에서 용어가 갈리는 것도 이걸로 줄인다.
-        temperature: 0,
-        // 번역엔 사고가 거의 불필요하나, gemini-flash-lite-latest가 gemini-3.5-flash-lite로
-        // 자동 업그레이드되며 thinkingBudget:0(사고 끄기)을 더 이상 허용하지 않는다
-        // (INVALID_ARGUMENT 400 → 프록시 502 → 전 번역 실패). 최소값으로 낮춰 유지한다.
-        thinkingConfig: { thinkingBudget: 512 },
-        responseMimeType: 'application/json',
-        responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
-      },
-    });
+    const rawText = await generateTranslations(missTexts);
     const geminiMs = Date.now() - g0;
-    const fresh = JSON.parse(response.text ?? '[]');
+    const fresh = JSON.parse(rawText);
     if (!Array.isArray(fresh) || fresh.length !== missTexts.length) {
       console.error('translate length mismatch');
       return res.status(502).json({ error: 'upstream_error' });

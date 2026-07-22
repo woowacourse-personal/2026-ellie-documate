@@ -92,20 +92,36 @@ const server = createServer(async (req, res) => {
       const { texts } = await readBody(req);
       if (!Array.isArray(texts) || texts.length === 0) return res.writeHead(400).end();
       const g0 = Date.now();
-      const r = await genai.models.generateContent({
-        model: TRANSLATE_MODEL,
-        contents: JSON.stringify(texts),
-        config: {
-          systemInstruction: TRANSLATION_SYSTEM,
-          temperature: 0, // 번역 일관성 — api/translate.ts와 동기(주석은 그쪽 참고)
-          thinkingConfig: { thinkingBudget: 512 }, // 0은 3.5-flash-lite에서 거부됨 — api/translate.ts 참고
-
-          responseMimeType: 'application/json',
-          responseSchema: TRANSLATE_SCHEMA,
-        },
-      });
+      // 모델 업그레이드 내성 폴백 — api/translate.ts의 generateTranslations와 동기(주석은 그쪽).
+      const contents = JSON.stringify(texts);
+      let rawText;
+      try {
+        const r = await genai.models.generateContent({
+          model: TRANSLATE_MODEL,
+          contents,
+          config: {
+            systemInstruction: TRANSLATION_SYSTEM,
+            temperature: 0,
+            thinkingConfig: { thinkingBudget: 512 }, // 0은 3.5-flash-lite에서 거부됨
+            responseMimeType: 'application/json',
+            responseSchema: TRANSLATE_SCHEMA,
+          },
+        });
+        rawText = r.text ?? '[]';
+      } catch (err) {
+        const e = err ?? {};
+        const rejected = e.status === 400 || /invalid[_\s-]?argument/i.test(e.message ?? '');
+        if (!rejected) throw err;
+        console.warn('[proxy] 최적 설정 거부 → 최소 설정 폴백', err);
+        const r = await genai.models.generateContent({
+          model: TRANSLATE_MODEL,
+          contents,
+          config: { systemInstruction: TRANSLATION_SYSTEM, temperature: 0, responseMimeType: 'application/json' },
+        });
+        rawText = r.text ?? '[]';
+      }
       const geminiMs = Date.now() - g0;
-      const translations = JSON.parse(r.text ?? '[]');
+      const translations = JSON.parse(rawText);
       if (!Array.isArray(translations) || translations.length !== texts.length) {
         console.error('translate length mismatch', texts.length, translations.length);
         return res.writeHead(502).end();
