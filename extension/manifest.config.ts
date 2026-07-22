@@ -8,7 +8,7 @@ import { defineManifest } from '@crxjs/vite-plugin';
 export default defineManifest({
   manifest_version: 3,
   name: 'DocuMate',
-  version: '1.0.1',
+  version: '1.0.2',
 
   // 확장 ID는 크롬 웹스토어가 게시 시 배정한다(매니페스트에 `key`를 넣으면 업로드가
   // 거부됨 — "key 입력란은 매니페스트에 허용되지 않습니다"). 따라서 여기엔 key를 두지
