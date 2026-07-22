@@ -174,7 +174,16 @@ function shell(opts: DragPopupOptions, close: () => void): HTMLElement {
 
   pop.append(head, src, tr, toggle, convoBox);
 
-  translateOnce(opts.text, opts.precedingText)
+  // 선택이 문단(문맥)보다 충분히 짧을 때(단어·구절)만 문맥을 붙여 번역한다.
+  // 선택이 곧 문단 전체면 문맥 없이 번역 → 전체 번역과 **동일한 결과**가 나오고 공용 캐시도
+  // 적중한다(같은 문장이므로). 문맥은 단어의 다의성을 잡는 용도지, 문장 전체엔 불필요하다.
+  // (해설(convoBox)은 문장 전체여도 문서 맥락이 필요하므로 precedingText를 그대로 쓴다.)
+  const trContext =
+    opts.precedingText && opts.text.length <= opts.precedingText.length * 0.85
+      ? opts.precedingText
+      : undefined;
+
+  translateOnce(opts.text, trContext)
     .then((translation) => {
       tr.classList.remove('loading');
       tr.textContent = translation; // LLM 출력 → textContent로만
