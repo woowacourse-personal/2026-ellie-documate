@@ -81,9 +81,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const context = rawContext?.slice(0, LIMITS.MAX_CONTEXT_CHARS);
   // 문서 제목(주제 문맥). 전체 번역에도 주제를 반영하되, 캐시는 유지한다(제목은 세부 문맥이
   // 아니라 문서 전반의 주제라, 같은 페이지의 여러 사용자·재방문이 그대로 공유해도 맞다).
+  // 제목 + 도입부라 제목만일 때보다 길다 → 문맥 상한(MAX_CONTEXT_CHARS)으로 자른다.
   const docTitle =
     typeof req.body?.docTitle === 'string'
-      ? req.body.docTitle.slice(0, LIMITS.MAX_TITLE_CHARS)
+      ? req.body.docTitle.slice(0, LIMITS.MAX_CONTEXT_CHARS)
       : undefined;
   const useCache = !context; // 주변 문맥(드래그 단어)만 캐시 우회. docTitle은 캐시 유지.
 

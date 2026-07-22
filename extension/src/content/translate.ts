@@ -12,6 +12,9 @@ import { mountExplain } from './ui/explain';
 // 해설(F2)에 넘길 문서 맥락. 문서 제목 + 각 문단의 앞 문단 텍스트.
 export interface DocContext {
   title: string;
+  // 번역용 주제 문맥: 제목 + 도입부(첫 본문 문단). 제목만으론 분야가 애매할 수 있어
+  // 도입부를 함께 넘겨 모델이 전문 분야·주제를 더 정확히 판별하게 한다. (해설은 title만 씀)
+  topicHint: string;
   precedingOf(id: string): string | undefined;
 }
 
@@ -92,7 +95,7 @@ export function createTranslator(doc: DocContext): Translator {
       type: 'DOCUMATE_TRANSLATE',
       items: texts.map((text, i) => ({ id: `u${i}`, text })),
       source: 'paragraph',
-      docTitle: doc.title, // 문서 주제를 문맥으로 → 용어를 이 문서 주제에 맞게 번역
+      docTitle: doc.topicHint, // 제목 + 도입부 → 분야·주제를 정확히 파악해 번역
     };
 
     const tSend = performance.now();
