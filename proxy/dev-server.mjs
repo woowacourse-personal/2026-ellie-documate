@@ -98,7 +98,8 @@ const server = createServer(async (req, res) => {
         config: {
           systemInstruction: TRANSLATION_SYSTEM,
           temperature: 0, // 번역 일관성 — api/translate.ts와 동기(주석은 그쪽 참고)
-          thinkingConfig: { thinkingBudget: 0 },
+          thinkingConfig: { thinkingBudget: 512 }, // 0은 3.5-flash-lite에서 거부됨 — api/translate.ts 참고
+
           responseMimeType: 'application/json',
           responseSchema: TRANSLATE_SCHEMA,
         },

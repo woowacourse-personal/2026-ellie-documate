@@ -56,7 +56,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 깨진다(Modifier → 수식어/수정자). 0이면 5번 모두 동일 + 규칙 준수.
         // 청크가 병렬로 나가므로 페이지 안에서 용어가 갈리는 것도 이걸로 줄인다.
         temperature: 0,
-        thinkingConfig: { thinkingBudget: 0 }, // 번역엔 사고 불필요 — 비용/지연 절약
+        // 번역엔 사고가 거의 불필요하나, gemini-flash-lite-latest가 gemini-3.5-flash-lite로
+        // 자동 업그레이드되며 thinkingBudget:0(사고 끄기)을 더 이상 허용하지 않는다
+        // (INVALID_ARGUMENT 400 → 프록시 502 → 전 번역 실패). 최소값으로 낮춰 유지한다.
+        thinkingConfig: { thinkingBudget: 512 },
         responseMimeType: 'application/json',
         responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
       },
