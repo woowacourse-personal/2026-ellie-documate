@@ -183,7 +183,7 @@ function shell(opts: DragPopupOptions, close: () => void): HTMLElement {
       ? opts.precedingText
       : undefined;
 
-  translateOnce(opts.text, trContext)
+  translateOnce(opts.text, trContext, opts.docTitle)
     .then((translation) => {
       tr.classList.remove('loading');
       tr.textContent = translation; // LLM 출력 → textContent로만

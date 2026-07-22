@@ -29,6 +29,7 @@ export async function translateViaProxy(
   texts: string[],
   source: 'drag' | 'paragraph',
   context?: string,
+  docTitle?: string,
 ): Promise<ProxyResult> {
   const out: TranslateOutcome[] = [];
   let geminiMs = 0;
@@ -36,7 +37,7 @@ export async function translateViaProxy(
     const chunk = texts.slice(i, i + TRANSLATE_BATCH);
     const t0 = Date.now();
     try {
-      const r = await translateChunk(chunk, source, context);
+      const r = await translateChunk(chunk, source, context, docTitle);
       geminiMs += r.geminiMs;
       console.log(
         `[Documate BG] 청크 ${chunk.length}개 성공 · 프록시왕복 ${Date.now() - t0}ms · Gemini ${r.geminiMs}ms`,
@@ -58,6 +59,7 @@ async function translateChunk(
   chunk: string[],
   source: 'drag' | 'paragraph',
   context?: string,
+  docTitle?: string,
 ): Promise<{ translations: string[]; geminiMs: number }> {
   let lastErr: Error | undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -66,7 +68,7 @@ async function translateChunk(
       res = await fetch(`${PROXY_BASE_URL}/api/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texts: chunk, source, context }),
+        body: JSON.stringify({ texts: chunk, source, context, docTitle }),
       });
     } catch (e) {
       lastErr = new Error('네트워크 오류 (프록시 미실행?)');

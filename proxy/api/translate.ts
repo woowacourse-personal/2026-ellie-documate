@@ -19,9 +19,12 @@ import { checkRateLimit } from '../lib/ratelimit.js';
 // 않는다. (실측 장애: 3.5-flash-lite가 thinkingBudget:0을 거부 → 이 폴백이면 자동 복구됐다.)
 // 주의: 이건 '설정 거부' 같은 하드 에러만 막는다. 모델이 조용히 나쁘게 번역하는 품질 드리프트는
 // 못 막으므로 모니터링이 별도로 필요하다.
-async function generateTranslations(texts: string[], context?: string): Promise<string> {
+async function generateTranslations(
+  texts: string[],
+  promptCtx: { docTitle?: string; context?: string },
+): Promise<string> {
   const contents = JSON.stringify(texts);
-  const systemInstruction = translationSystem(context);
+  const systemInstruction = translationSystem(promptCtx);
   try {
     const r = await genai.models.generateContent({
       model: TRANSLATE_MODEL,
@@ -76,7 +79,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // — 같은 단어라도 문맥에 따라 뜻이 달라지므로 문맥 없는 캐시 값을 쓰면 안 된다.
   const rawContext = typeof req.body?.context === 'string' ? req.body.context : undefined;
   const context = rawContext?.slice(0, LIMITS.MAX_CONTEXT_CHARS);
-  const useCache = !context;
+  // 문서 제목(주제 문맥). 전체 번역에도 주제를 반영하되, 캐시는 유지한다(제목은 세부 문맥이
+  // 아니라 문서 전반의 주제라, 같은 페이지의 여러 사용자·재방문이 그대로 공유해도 맞다).
+  const docTitle =
+    typeof req.body?.docTitle === 'string'
+      ? req.body.docTitle.slice(0, LIMITS.MAX_TITLE_CHARS)
+      : undefined;
+  const useCache = !context; // 주변 문맥(드래그 단어)만 캐시 우회. docTitle은 캐시 유지.
 
   const all = texts as string[];
 
@@ -103,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2) 미적중만 번역한다. 문단마다 1요청 대신 배치 전체를 1요청으로 묶는다.
     const missTexts = missIdx.map((i) => all[i]);
     const g0 = Date.now();
-    const rawText = await generateTranslations(missTexts, context);
+    const rawText = await generateTranslations(missTexts, { docTitle, context });
     const geminiMs = Date.now() - g0;
     const fresh = JSON.parse(rawText);
     if (!Array.isArray(fresh) || fresh.length !== missTexts.length) {
